@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#090909">
+  <title>OpenSlaved — a club without closing time</title>
+  <link rel="stylesheet" href="src/style.css">
+</head>
+<body>
+  <div class="shell">
+    <header><div class="brand">open<b>slaved</b></div><div class="signal"><i></i><span>signal found</span></div></header>
+    <main>
+      <canvas tabindex="0" id="scene" aria-label="Explore a 3D club with polygonal dancers"></canvas>
+      <div class="frame" aria-hidden="true"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i></div>
+      <div class="hud"><div><span id="chapter">out of phase</span><div class="pips"><i class="pip"></i><i class="pip"></i><i class="pip"></i></div></div><span id="timer">00:00</span></div>
+      <div class="hint" id="hint">WASD / arrows: move and dance · Space: dance · Q: drink · C: crouch · click + mouse: look · Esc: release cursor · E / click: interact · B: dance · L: lights</div>
+      <div class="move-controls"><button id="move-forward" aria-label="Walk forward">↑</button><button id="move-back" aria-label="Walk backward">↓</button><button id="move-left" aria-label="Strafe left">←</button><button id="move-right" aria-label="Strafe right">→</button></div>
+      <div class="crosshair" aria-hidden="true">+</div>
+      <section class="overlay" id="intro" aria-label="Start game">
+        <div class="card"><p class="eyebrow">a club without closing time</p><h1>Open<br>Slaved</h1><p class="lede">Explore the floor, share a drink and dance with the crowd. The bar is on the left; the restroom is at the back. Stay as long as you like.</p><div class="warning"><strong>WARNING</strong><span>PHOTOSENSITIVE EPILEPSY WARNING: strobe mode uses intense flashes and sudden lighting changes. Gentle mode disables flashes. Press L to switch during play.</span></div><button class="start" id="begin">Enter with intense strobes <span>↗</span></button><button class="start soft" id="begin-soft">Enter in gentle mode</button><div class="keys"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><span>move / dance</span><kbd>space</kbd><span>dance · Q: drink · C: crouch</span></div></div>
+      </section>
+      <section class="overlay hidden" id="ending" aria-label="End game"><div class="card end"><p class="eyebrow" id="endtag">transmission complete</p><h1 id="endtitle">The exit<br>found you.</h1><p class="lede" id="endcopy">Three pulses kept playing after you left.</p><button class="start" id="again">Enter again <span>↗</span></button></div></section>
+    </main>
+    <footer><div class="sound-controls" aria-label="Sound controls"><button type="button" id="sound-toggle" aria-pressed="true">Sound: on</button><label><span>Volume</span><input id="sound-volume" type="range" min="0" max="1" step=".01" value=".55" aria-label="Music volume"></label><span class="sound-status" id="sound-status">starts on entry</span></div><span class="right">no fixed destination<br>move with care</span></footer>
+  </div>
+  <script src="vendor/three.min.js"></script>
+  <script src="src/audio.js"></script>
+  <script src="src/tab-audio.js"></script>
+  <script src="src/engine.js"></script>
+</body>
+</html>
