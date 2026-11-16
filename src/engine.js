@@ -905,7 +905,9 @@
       canvas.addEventListener('click',event=>{if(playing&&event.button===0&&Math.hypot(event.clientX-clickX,event.clientY-clickY)<6)interact();});
       canvas.addEventListener('pointerdown',event=>{
         if(!playing)return;clickX=event.clientX;clickY=event.clientY;dragging=true;lastX=event.clientX;lastY=event.clientY;
-        canvas.setPointerCapture(event.pointerId);requestLook();
+        // Capture is refused while the pointer is locked; looking around still works without it.
+        try{canvas.setPointerCapture(event.pointerId);}catch(error){}
+        requestLook();
       });
       canvas.addEventListener('pointermove',event=>{
         if(!playing||document.pointerLockElement===canvas||!dragging)return;
