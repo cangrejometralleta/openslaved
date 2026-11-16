@@ -22,6 +22,23 @@
     const jointShape=new THREE.SphereGeometry(.085,12,8);
     const guestColors=[0xef20df,0xcdff24,0x29f5cb,0xf3eada,0xf44069];
     const guestMaterials=guestColors.map(color=>new THREE.MeshBasicMaterial({color}));
+    const shadeMaterials=guestColors.map(color=>new THREE.MeshBasicMaterial({color:new THREE.Color(color).multiplyScalar(.42)}));
+    const handShape=new THREE.SphereGeometry(1,10,8).scale(.07,.09,.05);
+    const footShape=new THREE.BoxGeometry(.13,.08,.27);
+    const straightTorso=new THREE.CylinderGeometry(.2,.185,.72,12,1).scale(1,1,.8);
+    const skirtShape=new THREE.CylinderGeometry(.15,.3,.5,14,1).scale(1,1,.85);
+    // Headwear is positioned in head space: none, bun, crest, brim, bob.
+    const hairShapes=[null,
+      new THREE.SphereGeometry(.1,10,8).translate(0,.37,-.07),
+      new THREE.ConeGeometry(.1,.3,5).translate(0,.47,0),
+      new THREE.CylinderGeometry(.21,.21,.035,14).translate(0,.2,.05),
+      new THREE.SphereGeometry(1,12,10).scale(.19,.25,.17).translate(0,.1,-.07)];
+    const puffShape=new THREE.IcosahedronGeometry(1,1);
+    const smokePuffs=[];
+    const smokeLines=['They nod. "Loud in there, isn\'t it."','"I only come for the second hour. The first is all elbows."',
+      '"My ears ring in a key now. Somewhere near F."','"You dance like you mean it. That is rare."',
+      '"Stay as long as you like. Nobody counts in here."'];
+    let smoker=null, cigarette=0, dragUntil=0, exhaled=true;
     const headMaterial=new THREE.MeshStandardMaterial({
       color:0x202a24,roughness:.95,metalness:0,flatShading:false,
       emissive:0x202a24,emissiveIntensity:.18
@@ -243,55 +260,146 @@
       }
       return mesh;
     }
-    function addLimb(parent,x,y,z,upperLength,lowerLength,material){
+    function addLimb(parent,x,y,z,upperLength,lowerLength,material,thick=1,endShape=null,endMaterial=material){
       const pivot=new THREE.Group();pivot.position.set(x,y,z);parent.add(pivot);
       addPart(jointShape,material,0,0,0,pivot);
-      const upper=addPart(limbShape,material,0,-upperLength/2,0,pivot);upper.scale.y=upperLength;
+      const upper=addPart(limbShape,material,0,-upperLength/2,0,pivot);upper.scale.set(thick,upperLength,thick);
       const elbow=new THREE.Group();elbow.position.y=-upperLength;pivot.add(elbow);
       addPart(jointShape,material,0,0,0,elbow);
-      const lower=addPart(limbShape,material,0,-lowerLength/2,0,elbow);lower.scale.set(.83,lowerLength,.83);
+      const lower=addPart(limbShape,material,0,-lowerLength/2,0,elbow);lower.scale.set(.83*thick,lowerLength,.83*thick);
+      if(endShape)addPart(endShape,endMaterial,0,-lowerLength-(endShape===footShape?0:.03),endShape===footShape?.07:0,elbow);
       return {pivot,elbow};
     }
-    function addGuest(x,z,index,stationary=false){
+    function readLook(index){
+      // A deterministic hash gives every guest a stable silhouette, outfit and way of dancing.
+      const pick=(salt,count)=>Math.abs(Math.floor(Math.sin(index*12.9898+salt*78.233)*43758.5453))%count;
+      const tone=index%guestColors.length, outfit=pick(1,4);
+      return {
+        top:outfit===2?shadeMaterials[tone]:guestMaterials[tone],
+        bottom:outfit===1?shadeMaterials[tone]:guestMaterials[tone],
+        accent:outfit===2?guestMaterials[tone]:shadeMaterials[tone],
+        torso:pick(2,3), hair:pick(3,hairShapes.length),
+        width:[.9,1,1.13][pick(4,3)], limb:[.82,1,1.18][pick(5,3)], height:.9+pick(6,5)*.04,
+        style:{lift:[0,0,.55,1.1][pick(7,4)],bounce:[.7,1,1.35][pick(8,3)],twist:[.6,1,1.3][pick(9,3)],stride:[.6,1,1.25][pick(10,3)]}
+      };
+    }
+    function addGuest(x,z,index,stationary=false,standing=true){
       const root=new THREE.Group();root.position.set(x,0,z);scene.add(root);
       const body=new THREE.Group();body.position.y=1.05;root.add(body);
-      const coat=guestMaterials[index%guestMaterials.length];
-      const skin=headMaterial;
-      const trousers=coat;
-      addPart(torsoShape,coat,0,.31,0,body);
-      addPart(hipShape,trousers,0,-.055,0,body);
+      const look=readLook(index), skin=headMaterial;
+      const torso=addPart(look.torso===1?straightTorso:torsoShape,look.top,0,.31,0,body);torso.scale.x=look.width;
+      addPart(hipShape,look.bottom,0,-.055,0,body);
+      if(look.torso===2&&standing)addPart(skirtShape,look.top,0,-.16,0,body);
       const head=addPart(headShape,skin,0,1.04,0,body);head.rotation.x=-.12;
-      const leftArm=addLimb(body,-.23,.58,0,.35,.32,coat);
-      const rightArm=addLimb(body,.23,.58,0,.35,.32,coat);
-      const leftLeg=addLimb(body,-.12,-.15,0,.42,.4,trousers);
-      const rightLeg=addLimb(body,.12,-.15,0,.42,.4,trousers);
+      if(hairShapes[look.hair])addPart(hairShapes[look.hair],look.accent,0,0,0,head);
+      const shoulder=.23*look.width;
+      const leftArm=addLimb(body,-shoulder,.58,0,.35,.32,look.top,look.limb,handShape,skin);
+      const rightArm=addLimb(body,shoulder,.58,0,.35,.32,look.top,look.limb,handShape,skin);
+      const leftLeg=addLimb(body,-.12,-.15,0,.42,.4,look.bottom,look.limb,footShape,skin);
+      const rightLeg=addLimb(body,.12,-.15,0,.42,.4,look.bottom,look.limb,footShape,skin);
       const ghosts=ghostMaterials.map((material,offset)=>{
         const echo=new THREE.Group();echo.visible=false;echo.position.x=(offset?1:-1)*.065;body.add(echo);
         addPart(torsoShape,material,0,.31,0,echo);
         addPart(headShape,material,0,1.04,0,echo);return echo;
       });
-      const guest={x,z,index,root,body,head,leftArm,rightArm,leftLeg,rightLeg,ghosts,stationary,shared:false,radius:.27};
+      const guest={x,z,index,root,body,head,leftArm,rightArm,leftLeg,rightLeg,ghosts,stationary,style:look.style,shared:false,radius:.27};
       // Back-facing shells provide a luminous silhouette while preserving the continuous body contour.
       const surfaces=[];body.traverse(object=>{if(object.isMesh&&!ghosts.some(e=>e===object.parent))surfaces.push(object);});
       const haloMaterial=new THREE.MeshBasicMaterial({color:0xf1ffe8,side:THREE.BackSide,transparent:true,opacity:.38,depthWrite:false});
       surfaces.forEach(part=>{const halo=new THREE.Mesh(part.geometry,haloMaterial);halo.scale.setScalar(1.12);part.add(halo);});
       if(stationary){root.rotation.y=Math.PI/2;leftArm.pivot.rotation.x=-.45;rightArm.pivot.rotation.x=-.45;leftArm.elbow.rotation.x=-1.1;rightArm.elbow.rotation.x=-1.1;}
-      root.rotation.y=stationary?Math.PI/2:index*2.37;root.scale.setScalar(.91+(index%4)*.045);guests.push(guest);return guest;
+      root.rotation.y=stationary?Math.PI/2:index*2.37;root.scale.setScalar(look.height);guests.push(guest);return guest;
     }
     function buildGuests(){
       const places=[[-4,-7],[-1,-6],[2,-7],[5,-6.5],[7.8,-8],[-4.8,-12],[-1,-11],[1.7,-10],[4,-11.7],[7.8,-12.7],[-5.2,-16],[-.7,-15],[1.6,-16.7],[4.5,-15.2],[8,-17],[-1.2,-19],[1,-19.8],[4,-19.4],[-6,-19.8],[-.3,-8.2],[3.6,-8.7],[7.5,-20]];
       places.forEach(([x,z],index)=>addGuest(x,z,index));
       for(const [index,z] of [-5,-11].entries()){
-        const guest=addGuest(-6.7,z,30+index,true);guest.seated=true;guest.radius=.34;
+        const guest=addGuest(-6.7,z,30+index,true,false);guest.seated=true;guest.radius=.34;
         guest.root.rotation.y=-Math.PI/2;guest.body.position.y=.86;
         for(const leg of [guest.leftLeg,guest.rightLeg]){leg.pivot.rotation.x=-Math.PI/2;leg.elbow.rotation.x=Math.PI/2;}
         for(const arm of [guest.leftArm,guest.rightArm]){arm.pivot.rotation.x=-.5;arm.elbow.rotation.x=-.8;}
         guest.head.rotation.x=.12;
       }
+      buildSmoker();
+    }
+    function buildSmoker(){
+      // The smoker sits on the far bench, facing the room, and keeps a slow cycle of drags.
+      smoker=addGuest(14.4,-11.8,41,false,false);smoker.smoker=true;smoker.radius=.3;
+      smoker.root.rotation.y=0;smoker.body.position.y=.67;
+      for(const leg of [smoker.leftLeg,smoker.rightLeg]){leg.pivot.rotation.x=-Math.PI/2;leg.elbow.rotation.x=Math.PI/2;}
+      smoker.leftArm.pivot.rotation.x=-.5;smoker.leftArm.elbow.rotation.x=-.8;
+      smoker.cigarette=new THREE.Group();smoker.cigarette.position.set(0,-.4,.03);smoker.rightArm.elbow.add(smoker.cigarette);
+      const paper=new THREE.Mesh(new THREE.CylinderGeometry(.011,.011,.12,6),new THREE.MeshBasicMaterial({color:0xf4f1e6}));
+      paper.rotation.x=Math.PI/2;paper.position.z=.06;smoker.cigarette.add(paper);
+      smoker.ember=new THREE.Mesh(new THREE.SphereGeometry(.016,8,6),new THREE.MeshBasicMaterial({color:0xff6a1f}));
+      smoker.ember.position.z=.125;smoker.cigarette.add(smoker.ember);
+      for(let index=0;index<20;index++){
+        const mesh=new THREE.Mesh(puffShape,new THREE.MeshBasicMaterial({color:0xcfdcd5,transparent:true,opacity:0,depthWrite:false}));
+        mesh.visible=false;scene.add(mesh);smokePuffs.push({mesh,age:1,life:1,size:.05,vx:0,vy:0,vz:0});
+      }
+    }
+    function emitSmoke(x,y,z,dx,dz,count=4,size=.06){
+      for(let made=0;made<count;made++){
+        const puff=smokePuffs.find(puff=>puff.age>=puff.life)||smokePuffs[0];
+        const drift=made*1.7+x*3.1;
+        Object.assign(puff,{age:0,life:2.2+made*.35,size:size*(1+made*.18),
+          vx:dx*(.5-made*.07)+Math.sin(drift)*.05,vy:.16+made*.03,vz:dz*(.5-made*.07)+Math.cos(drift)*.05});
+        puff.mesh.position.set(x,y,z);puff.mesh.rotation.set(drift,drift*.7,0);
+      }
+    }
+    function updateSmoke(dt){
+      for(const puff of smokePuffs){
+        if(puff.age>=puff.life){puff.mesh.visible=false;continue;}
+        puff.age+=dt;const progress=Math.min(1,puff.age/puff.life),slow=Math.exp(-puff.age*1.3);
+        puff.mesh.visible=true;
+        puff.mesh.position.x+=puff.vx*slow*dt;puff.mesh.position.y+=puff.vy*dt;puff.mesh.position.z+=puff.vz*slow*dt;
+        puff.mesh.rotation.y+=dt*.5;puff.mesh.scale.setScalar(puff.size*(1+progress*2.6));
+        puff.mesh.material.opacity=.17*Math.sin(Math.min(1,progress*5)*Math.PI/2)*(1-progress);
+      }
+    }
+    const smokePoint=new THREE.Vector3();
+    function animateSmoker(guest,time){
+      const cycle=(time+1.5)%7,round=Math.floor((time+1.5)/7);
+      const ease=value=>{const t=Math.max(0,Math.min(1,value));return t*t*(3-2*t);};
+      const drag=ease(cycle/.9)*(1-ease((cycle-2.1)/.9));
+      guest.rightArm.pivot.rotation.set(-.5-drag*1.8,0,-.08-drag*.17);
+      guest.rightArm.elbow.rotation.x=-.8-drag*.4;
+      guest.ember.scale.setScalar(1+drag*1.4+Math.sin(time*9)*.12);
+      const dx=player.x-guest.x,dz=player.z-guest.z;
+      const attention=guest.shared?1:Math.max(0,1-Math.hypot(dx,dz)/4.5);
+      const turn=Math.max(-1,Math.min(1,Math.atan2(dx,dz)));
+      guest.head.rotation.y+=(turn*attention-guest.head.rotation.y)*.08;
+      guest.head.rotation.x=-.05-ease((cycle-2.9)/.5)*(1-ease((cycle-4.2)/.8))*.3;
+      guest.body.rotation.x=Math.sin(time*.7)*.025;
+      if(cycle>3.1&&guest.puffed!==round){
+        guest.puffed=round;guest.head.getWorldPosition(smokePoint);
+        const aim=guest.root.rotation.y+guest.head.rotation.y;
+        emitSmoke(smokePoint.x+Math.sin(aim)*.2,smokePoint.y-.05,smokePoint.z+Math.cos(aim)*.2,Math.sin(aim),Math.cos(aim),5);
+      }
+      const wisp=Math.floor(time/1.3);
+      if(guest.wisp!==wisp){guest.wisp=wisp;guest.ember.getWorldPosition(smokePoint);emitSmoke(smokePoint.x,smokePoint.y,smokePoint.z,0,0,1,.022);}
+    }
+    function shareSmoke(){
+      if(!cigarette){
+        if(Math.hypot(player.x-smoker.x,player.z-smoker.z)>2.4){showMessage('Someone is smoking on the far bench. Walk over · E to join them.');return;}
+        cigarette=6;smoker.shared=true;dancing=false;score.resonate();
+        showMessage('They tap one out of the pack and light it for you. E / click: take a drag.');return;
+      }
+      if(elapsed<dragUntil)return;
+      dragUntil=elapsed+1.7;exhaled=false;cigarette--;
+      showMessage(cigarette?`${smokeLines[(5-cigarette)%smokeLines.length]} · ${cigarette} drags left`:'Last drag. You stub it out in the ashtray · E near them for another.',4);
+    }
+    function updateCigarette(){
+      if(!exhaled&&elapsed>dragUntil-.6){
+        exhaled=true;const x=Math.sin(player.angle),z=-Math.cos(player.angle);
+        emitSmoke(player.x+x*.4,1.5,player.z+z*.4,x*1.6,z*1.6,5,.05);
+      }
+      if(cigarette&&player.x<9.6){cigarette=0;showMessage('You stub it out at the door.',3);}
     }
     function rhythmMultiplier(combo){return Math.min(4,1+Math.floor(Math.max(0,combo)/10));}
     function animateGuest(guest,time){
       if(guest.stationary)return;
+      if(guest.smoker){animateSmoker(guest,time);return;}
       updateGuestDrink(guest);
       const external=window.clubAudioFrame;
       const multiplier=rhythmMultiplier(rhythmCombo);
@@ -303,21 +411,21 @@
       const phase=(frame-1+blend)*Math.PI/2;
       const poses=[-1,.3,1,-.45,-.8,.65,.15,1];
       const pose=offset=>{const shift=Math.round(offset/(Math.PI/2)), current=((frame+shift)%8+8)%8,previous=(current+7)%8;return poses[previous]*(1-blend)+poses[current]*blend;};
-      const strength=expression;
+      const strength=expression,{lift,bounce,twist,stride}=guest.style;
       const distance=Math.hypot(player.x-guest.x,player.z-guest.z);
       const presence=Math.max(0,1-distance/7)*.3;
       const facing=Math.atan2(player.x-guest.x,player.z-guest.z);
       guest.root.rotation.y+=Math.atan2(Math.sin(facing-guest.root.rotation.y),Math.cos(facing-guest.root.rotation.y))*Math.min(1,presence*.16);
-      guest.body.position.y=1.05+pose(Math.PI/2)*.12*strength;
+      guest.body.position.y=1.05+pose(Math.PI/2)*.12*strength*bounce;
       guest.body.rotation.z=pose(0)*(.28+.15*presence)*strength;
-      guest.body.rotation.y=pose(Math.PI/2)*(.5+.35*presence)*strength;
+      guest.body.rotation.y=pose(Math.PI/2)*(.5+.35*presence)*strength*twist;
       guest.head.rotation.z=pose(.5)*.13*expression;guest.head.rotation.y=pose(Math.PI)*.24*expression;
-      guest.leftArm.pivot.rotation.set(pose(0)*(.85+.3*presence)*expression,0,-.3-pose(Math.PI/2)*(.85+.3*presence)*expression);
-      guest.rightArm.pivot.rotation.set(-pose(Math.PI/2)*(.85+.3*presence)*expression,0,.3+pose(0)*(.85+.3*presence)*expression);
+      guest.leftArm.pivot.rotation.set(pose(0)*(.85+.3*presence)*expression-lift*1.3,0,-.3-lift*.25-pose(Math.PI/2)*(.85+.3*presence)*expression);
+      guest.rightArm.pivot.rotation.set(-pose(Math.PI/2)*(.85+.3*presence)*expression-lift*1.3,0,.3+lift*.25+pose(0)*(.85+.3*presence)*expression);
       guest.leftArm.elbow.rotation.x=-.9-pose(Math.PI/2)*.65;
       guest.rightArm.elbow.rotation.x=-.9-pose(Math.PI)*.65;
-      guest.leftLeg.pivot.rotation.x=pose(0)*.5*strength;
-      guest.rightLeg.pivot.rotation.x=-pose(0)*.5*strength;
+      guest.leftLeg.pivot.rotation.x=pose(0)*.5*strength*stride;
+      guest.rightLeg.pivot.rotation.x=-pose(0)*.5*strength*stride;
       guest.leftLeg.elbow.rotation.x=Math.max(0,-pose(0))*.65*strength;
       guest.rightLeg.elbow.rotation.x=Math.max(0,pose(0))*.65*strength;
       guest.ghosts.forEach((echo,index)=>{echo.visible=false;echo.position.x=(index?1:-1)*(.06+Math.abs(pose(0))*.09);});
@@ -403,7 +511,7 @@
     }
     function showMessage(message,duration=5){hint.textContent=message;messageUntil=elapsed+duration;}
     function nearestGuest(){
-      return guests.filter(guest=>!guest.stationary).reduce((near,guest)=>{
+      return guests.filter(guest=>!guest.stationary&&!guest.smoker).reduce((near,guest)=>{
         const distance=Math.hypot(player.x-guest.x,player.z-guest.z);
         return distance<1.9&&(!near||distance<near.distance)?{guest,distance}:near;
       },null);
@@ -485,6 +593,7 @@
         orderDrink();return;
       }
       if(player.z<-24.5){useBathroom();return;}
+      if(player.x>10.3){shareSmoke();return;}
       const near=nearestGuest();
       if(near){
         if(drinks>0){giveGuestDrink(near.guest);return;}
@@ -496,7 +605,11 @@
       if(elapsed<messageUntil)return;
       if(seatedAtBar){hint.textContent='E: order a glass · Q: sip · X: stand up';return;}
       if(Math.hypot(player.x+6.7,player.z+8)<1.65){hint.textContent='Empty stool · X: sit · E / click: get drinks';return;}
-      if(player.x>10.3){hint.textContent='SMOKING ROOM · a quiet corner · return through the doorway';return;}
+      if(player.x>10.3){
+        hint.textContent=cigarette?`E / click: take a drag · ${cigarette} left · leave through the doorway to stub it out`:
+          Math.hypot(player.x-smoker.x,player.z-smoker.z)<2.4?'E / click: share a smoke':'SMOKING ROOM · someone is on the far bench · return through the doorway';
+        return;
+      }
       if(player.z<-24.5){
         const spot=nearestBathroom();
         hint.textContent=spot?(spot.kind==='water'?'E / click: drink water · reduces drunkenness':'E / click: use toilet · reduces drunkenness'):'RESTROOM · water fountains right · toilets in rear stalls';
@@ -532,7 +645,7 @@
       if(!playing)return;
       if(window.clubAudioFrame?.active)beatCount=window.clubAudioFrame.phase/(Math.PI*2);else beatCount+=dt*132/60;
       if(elapsed-lastRhythmTime>1.2){rhythmEnergy=Math.max(0,rhythmEnergy-dt*.18);rhythmCombo=0;}
-      elapsed+=dt;pulse=Math.max(0,pulse-dt*1.4);updateBathroom();updatePlayer(dt);window.clubRoomDistance=readRoomDistance();
+      elapsed+=dt;pulse=Math.max(0,pulse-dt*1.4);updateBathroom();updateCigarette();updatePlayer(dt);window.clubRoomDistance=readRoomDistance();
       for(const [index,signal] of signals.entries()){
         if(!signal.got&&Math.hypot(signal.x-player.x,signal.z-player.z)<1.65){
           signal.got=true;pips[index].classList.add('on');pulse=.7;score.resonate();
@@ -542,7 +655,7 @@
       timer.textContent=`${String(Math.floor(elapsed/60)).padStart(2,'0')}:${String(Math.floor(elapsed%60)).padStart(2,'0')}`;
       updateHints();
     }
-    let heldDrink;
+    let heldDrink, heldSmoke, heldEmber;
     let sipUntil=0;
     function updateHeldDrink(){
       if(!heldDrink){
@@ -560,6 +673,22 @@
       heldDrink.visible=playing&&(drinks>0||sipping);
       heldDrink.position.set(sipping?.06:.28,sipping?-.12:-.32,sipping?-.26:-.48);
       heldDrink.rotation.set(sipping?.65:0,0,Math.sin(elapsed*3)*.025);
+      if(!heldSmoke){
+        heldSmoke=new THREE.Group();camera.add(heldSmoke);
+        const skin=new THREE.MeshStandardMaterial({color:0x89e6d1,roughness:.7});
+        const forearm=new THREE.Mesh(new THREE.CylinderGeometry(.055,.075,.36,5),skin);
+        forearm.position.set(-.04,-.16,.08);forearm.rotation.x=-.55;heldSmoke.add(forearm);
+        const palm=new THREE.Mesh(new THREE.BoxGeometry(.13,.12,.10),skin);palm.position.set(-.025,-.03,.04);heldSmoke.add(palm);
+        const paper=new THREE.Mesh(new THREE.CylinderGeometry(.009,.009,.13,6),new THREE.MeshBasicMaterial({color:0xf4f1e6}));
+        paper.rotation.x=Math.PI/2;paper.position.set(.02,.04,-.06);heldSmoke.add(paper);
+        heldEmber=new THREE.Mesh(new THREE.SphereGeometry(.013,8,6),new THREE.MeshBasicMaterial({color:0xff6a1f}));
+        heldEmber.position.set(.02,.04,-.13);heldSmoke.add(heldEmber);
+      }
+      const dragging=elapsed<dragUntil-.6;
+      heldSmoke.visible=playing&&(cigarette>0||elapsed<dragUntil);
+      heldSmoke.position.set(dragging?-.07:-.3,dragging?-.13:-.32,dragging?-.24:-.5);
+      heldSmoke.rotation.set(dragging?.5:0,dragging?-.3:0,-Math.sin(elapsed*2.6)*.025);
+      heldEmber.scale.setScalar(dragging?2.2:1+Math.sin(elapsed*8)*.15);
     }
     function updateLights(){
       const phase=beatCount%2;
@@ -721,7 +850,7 @@
       const dt=Math.min(.08,Math.max(0,(time-last)/1000||0));last=time;
       if(!document.hidden){
         clockTime+=dt;updateWorld(dt);
-        guests.forEach(guest=>animateGuest(guest,clockTime));updateLights();updateScreen();updateWallEffects();updateFloorEffects();updateHeldDrink();updateBeatGuide();
+        guests.forEach(guest=>animateGuest(guest,clockTime));updateSmoke(dt);updateLights();updateScreen();updateWallEffects();updateFloorEffects();updateHeldDrink();updateBeatGuide();
         renderClub();
       }
       requestAnimationFrame(drawFrame);
@@ -737,7 +866,7 @@
     function start(soft=true){
       softMode=soft||matchMedia('(prefers-reduced-motion: reduce)').matches;
       bathroomAction=null;bathroomSpots.forEach(spot=>spot.particles.visible=false);
-      playing=true;rhythmEnergy=0;rhythmCombo=0;lastRhythmBeat=-Infinity;lastRhythmTime=-Infinity;seatedAtBar=false;tipsiness=0;elapsed=0;beatCount=0;pulse=0;dancing=false;drinks=0;sipsLeft=6;sipUntil=0;jumpTime=-1;crouch=0;keys.clear();
+      playing=true;rhythmEnergy=0;rhythmCombo=0;lastRhythmBeat=-Infinity;lastRhythmTime=-Infinity;seatedAtBar=false;tipsiness=0;elapsed=0;beatCount=0;pulse=0;dancing=false;drinks=0;sipsLeft=6;sipUntil=0;cigarette=0;dragUntil=0;exhaled=true;jumpTime=-1;crouch=0;keys.clear();
       Object.assign(player,{x:0,z:-2.5,angle:0,pitch:0});
       guests.forEach(guest=>{guest.shared=false;guest.drinkUntil=0;if(guest.cup)guest.cup.visible=false;});
       signals.forEach(signal=>signal.got=false);pips.forEach(pip=>pip.classList.remove('on'));

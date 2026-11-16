@@ -18,7 +18,7 @@ const source=fs.readFileSync(path.join(__dirname,'../src/engine.js'),'utf8');
 const instrumented=source.replace('    bootScene();',`    globalThis.game={player,solids,guests,movePlayer,readMovement,resolvePosition,findContact,
       createWorld(){scene=new THREE.Scene();buildRoom();buildGuests();return scene;},
       animate(time){guests.forEach(guest=>animateGuest(guest,time));},
-      interact,drinkCup,updateBathroom,readRoomDistance, get tipsiness(){return tipsiness;},get bathroomAction(){return bathroomAction;}, get drinks(){return drinks;},get dancing(){return dancing;},
+      interact,drinkCup,updateBathroom,updateCigarette,readRoomDistance,get cigarette(){return cigarette;},get smoker(){return smoker;}, get tipsiness(){return tipsiness;},get bathroomAction(){return bathroomAction;}, get drinks(){return drinks;},get dancing(){return dancing;},
       advance(seconds){elapsed+=seconds;return elapsed;}};`);
 vm.runInContext(instrumented,sandbox);
 const game=sandbox.game;
@@ -93,7 +93,7 @@ check('sharing a drink triggers a dance without a countdown ending',()=>{
 });
 check('world builds true meshes with finite geometry bounds',()=>{
   let count=0;scene.traverse(node=>{if(node.isMesh){count++;assert.ok(node.geometry?.isBufferGeometry);node.geometry.computeBoundingSphere();assert.ok(Number.isFinite(node.geometry.boundingSphere.radius));}});
-  assert.ok(count>300);assert.equal(game.guests.length,26);
+  assert.ok(count>300);assert.equal(game.guests.length,27);
   console.log(`  ${count} meshes, ${game.solids.length} colliders, ${game.guests.length} articulated figures`);
 });
 console.log(`${passed} checks passed`);
@@ -164,4 +164,25 @@ check('music distance fades in both quiet rooms and clears on the dance floor',(
   position(-5,-25);near(game.readRoomDistance(),.5);
   position(-5,-28);near(game.readRoomDistance(),1);
   position(0,-10);near(game.readRoomDistance(),0);
+});
+check('guests vary in silhouette and all end in hands and feet',()=>{
+  const dancers=game.guests.filter(guest=>!guest.stationary&&!guest.smoker);
+  const outline=guest=>{let meshes=0;guest.body.traverse(node=>{if(node.isMesh)meshes++;});
+    return [meshes,guest.root.scale.x.toFixed(2),guest.leftArm.pivot.position.x.toFixed(3),JSON.stringify(guest.style)].join('/');};
+  assert.ok(new Set(dancers.map(outline)).size>=15,'most dancers are told apart by build and dance style');
+  for(const guest of game.guests)for(const limb of [guest.leftArm,guest.rightArm,guest.leftLeg,guest.rightLeg])
+    assert.ok(limb.elbow.children.length>=3,'joint, lower limb and hand or foot');
+});
+check('the smoker shares a cigarette that lasts six drags and is stubbed out at the door',()=>{
+  const smoker=game.smoker;assert.ok(smoker.smoker&&!smoker.stationary);
+  position(11,-8.5);game.interact();assert.equal(game.cigarette,0,'too far away to be offered one');
+  const glasses=game.drinks;
+  position(smoker.x,smoker.z+1.2);game.interact();assert.equal(game.cigarette,6);assert.equal(smoker.shared,true);
+  game.interact();assert.equal(game.cigarette,5);
+  game.interact();assert.equal(game.cigarette,5,'a drag takes time');
+  game.advance(2);game.updateCigarette();game.interact();assert.equal(game.cigarette,4);
+  assert.equal(game.drinks,glasses,'smoking never touches the glass');
+  const resting=smoker.rightArm.pivot.rotation.x;game.animate(6);game.animate(7);
+  assert.ok(smoker.rightArm.pivot.rotation.x<resting-1,'the smoker lifts the cigarette');
+  position(9,-8.5);game.updateCigarette();assert.equal(game.cigarette,0);
 });

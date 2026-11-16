@@ -8,7 +8,7 @@ OpenSlaved explores the feeling of losing yourself in a nightclub: movement, mus
 
 ## The experience
 
-Explore a 3D club with a dance floor, bar, DJ booth, and bathroom. Move among faceless polygonal figures, dance, order drinks, and interact with the people around you. Angular dance poses and rhythmic lighting give the room its pulse.
+Explore a 3D club with a dance floor, bar, DJ booth, bathroom, and a smoking room where someone on the bench will share a cigarette. Move among faceless polygonal figures, dance, order drinks, and interact with the people around you. Angular dance poses and rhythmic lighting give the room its pulse.
 
 The game includes synthesized music and an optional browser-tab audio source. Use **Music source** to share audio from another tab; the club responds to the detected rhythm. Availability depends on your browser's tab-sharing support.
 
@@ -26,7 +26,7 @@ The game includes synthesized music and an optional browser-tab audio source. Us
 | C (hold) | Crouch |
 | Space | Tap the rhythm |
 | B | Toggle dancing |
-| E / click | Interact |
+| E / click | Interact (in the smoking room: share a smoke, take a drag) |
 | Q | Sip your drink |
 | X | Sit at the bar or stand up |
 | M | Select or stop a shared music source |
