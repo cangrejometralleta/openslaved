@@ -1,3 +1,19 @@
+// One acoustic path for synthesized music and shared-tab playback.
+function createRoomSound(context,destination){
+  const filter=context.createBiquadFilter(),level=context.createGain();
+  filter.type='lowpass';filter.Q.value=.7;filter.frequency.value=20000;
+  filter.connect(level);level.connect(destination);
+  let previous=-1;
+  function update(){
+    const distance=window.clubRoomDistance||0;
+    if(Math.abs(distance-previous)<.01)return;
+    previous=distance;
+    filter.frequency.setTargetAtTime(20000*Math.pow(700/20000,distance),context.currentTime,.25);
+    level.gain.setTargetAtTime(1-distance*.76,context.currentTime,.25);
+  }
+  update();
+  return {input:filter,update,dispose(){filter.disconnect();level.disconnect();}};
+}
     // Original synthesis: no recordings or external audio assets.
     function createScore({player,signals,isPlaying}){
       const tempo=132, beat=60/tempo, stepLength=beat/4, silence=.0001;
@@ -9,9 +25,9 @@
       const toggle=document.querySelector('#sound-toggle');
       const volume=document.querySelector('#sound-volume');
       const status=document.querySelector('#sound-status');
-      let context, output, mix, acid, filter, envelope, duck, echo, noise;
+      let context, output, mix, acid, filter, envelope, duck, echo, noise, roomSound;
       let running=false, enabled=true, nextTime=0, step=0, seenSignals=0;
-      let previousPitch=55, resonance=0, scheduler, fadeTimer;
+      let previousPitch=55, previousSlide=false, resonance=0, scheduler, fadeTimer;
 
       function setLevel(){
         toggle.textContent=enabled?'Sound: on':'Sound: off';
@@ -26,7 +42,7 @@
       }
       function makeDrive(){
         const shaper=context.createWaveShaper(), curve=new Float32Array(2048);
-        for(let i=0;i<curve.length;i++)curve[i]=Math.tanh((i*2/(curve.length-1)-1)*5.2)/3.1;
+        for(let i=0;i<curve.length;i++)curve[i]=Math.tanh((i*2/(curve.length-1)-1)*9)/2.6;
         shaper.curve=curve;shaper.oversample='2x';
         return shaper;
       }
@@ -37,7 +53,8 @@
         const limiter=context.createDynamicsCompressor();
         limiter.threshold.value=-12;limiter.knee.value=12;limiter.ratio.value=8;
         limiter.attack.value=.003;limiter.release.value=.15;
-        mix.connect(limiter);limiter.connect(output);output.connect(context.destination);
+        mix.connect(limiter);limiter.connect(output);
+        roomSound=createRoomSound(context,context.destination);output.connect(roomSound.input);
         mix.gain.value=0;noise=makeNoise();buildAcid();setLevel();
       }
       function contextConstructor(){
@@ -47,7 +64,7 @@
       }
       function buildAcid(){
         acid=context.createOscillator();acid.type='sawtooth';acid.frequency.value=55;
-        filter=context.createBiquadFilter();filter.type='lowpass';filter.Q.value=19;
+        filter=context.createBiquadFilter();filter.type='lowpass';filter.Q.value=23;
         envelope=context.createGain();envelope.gain.value=silence;
         duck=context.createGain();const drive=makeDrive();
         acid.connect(filter);filter.connect(drive);drive.connect(envelope);
@@ -87,17 +104,18 @@
         source.onended=()=>{source.disconnect();band.disconnect();gain.disconnect();stereo.disconnect();};
       }
       function playAcid(time,note,accent,slide,energy){
-        if(note===null)return;
+        if(note===null){envelope.gain.setTargetAtTime(silence,time,.018);previousSlide=false;return;}
         const pitch=55*Math.pow(2,note/12), duration=slide?stepLength*.96:stepLength*.79;
-        const cutoff=620+energy*3400+(accent?2400:0);
-        acid.frequency.setValueAtTime(slide?previousPitch:pitch,time);
-        acid.frequency.exponentialRampToValueAtTime(pitch,time+(slide?.065:.004));
+        const sweep=.5+.5*Math.sin(step*Math.PI/128);
+        const cutoff=420+sweep*2600+energy*2600+(accent?3200:0);
+        acid.frequency.setValueAtTime(previousSlide?previousPitch:pitch,time);
+        acid.frequency.exponentialRampToValueAtTime(pitch,time+(previousSlide?.065:.004));
         filter.frequency.setValueAtTime(Math.min(5200,cutoff),time);
         filter.frequency.exponentialRampToValueAtTime(150+energy*180,time+duration);
-        envelope.gain.setValueAtTime(silence,time);
-        envelope.gain.linearRampToValueAtTime(accent?.42:.29,time+.004);
+        if(!previousSlide)envelope.gain.setValueAtTime(silence,time);
+        envelope.gain.linearRampToValueAtTime(accent?.58:.38,time+.004);
         envelope.gain.exponentialRampToValueAtTime(slide?.13:silence,time+duration);
-        previousPitch=pitch;
+        previousPitch=pitch;previousSlide=slide;
       }
       function playChime(time,note,pan=0){
         const oscillator=context.createOscillator(), gain=context.createGain();
@@ -116,7 +134,7 @@
         osc.type='sawtooth';const hz=110*Math.pow(2,note/12);
         osc.frequency.setValueAtTime(hz*(index%3===0?.89:1),time);osc.frequency.exponentialRampToValueAtTime(hz,time+.045);
         tone.type='lowpass';tone.Q.value=10;tone.frequency.setValueAtTime(3000+(index%3)*700,time);tone.frequency.exponentialRampToValueAtTime(580,time+stepLength*1.7);
-        gain.gain.setValueAtTime(.0001,time);gain.gain.exponentialRampToValueAtTime(.15,time+.008);gain.gain.exponentialRampToValueAtTime(.0001,time+stepLength*2.7);
+        gain.gain.setValueAtTime(.0001,time);gain.gain.exponentialRampToValueAtTime(.065,time+.008);gain.gain.exponentialRampToValueAtTime(.0001,time+stepLength*2.7);
         pan.pan.value=Math.sin(index*.8)*.3;osc.connect(tone);tone.connect(gain);gain.connect(pan);pan.connect(mix);gain.connect(echo);
         osc.start(time);osc.stop(time+stepLength*3);osc.onended=()=>{osc.disconnect();tone.disconnect();gain.disconnect();pan.disconnect();};
       }
@@ -143,11 +161,12 @@
         playAcid(time,pattern[position],position%3===0,[3,6,11,14].includes(position),state.level);
         if(state.collected>0&&position%8===6)
           playChime(time,[0,7,10,15][bar%4],Math.sin(bar)*.65);
-        if(position%2===0)playLead(time,position/2,bar);
+        if(bar%8>=6&&position%4===2)playLead(time,position/2,bar);
         resonance*=.91;
       }
       function scheduleScore(){
         if(!running||context.state!=='running')return;
+        roomSound.update();
         if(nextTime<context.currentTime-.1)nextTime=context.currentTime+.03;
         while(nextTime<context.currentTime+.12){arrangeStep(nextTime);nextTime+=stepLength;step++;}
       }
@@ -156,7 +175,7 @@
           if(!context)buildScore();
           clearTimeout(fadeTimer);await context.resume();
           if(!isPlaying())return;
-          step=0;seenSignals=0;resonance=0;running=true;nextTime=context.currentTime+.045;
+          step=0;previousSlide=false;seenSignals=0;resonance=0;running=true;nextTime=context.currentTime+.045;
           mix.gain.cancelScheduledValues(context.currentTime);
           mix.gain.setTargetAtTime(1,context.currentTime,.08);
           clearInterval(scheduler);scheduler=setInterval(scheduleScore,25);scheduleScore();
@@ -186,7 +205,7 @@
       document.addEventListener('visibilitychange',()=>{
         if(!context)return;
         if(document.hidden)context.suspend().catch(()=>{});
-        else if(running)context.resume().catch(()=>{status.textContent='clickk sound to resume';});
+        else if(running)context.resume().catch(()=>{status.textContent='click sound to resume';});
       });
       toggle.addEventListener('click',()=>{
         if(running&&context.state!=='running')context.resume().catch(()=>{});

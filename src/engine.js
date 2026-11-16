@@ -15,11 +15,17 @@
     const score=createScore({player,signals,isPlaying:()=>playing});
     const materialCache=new Map();
     const unitBox=new THREE.BoxGeometry(1,1,1);
-    const limbShape=new THREE.CylinderGeometry(.065,.085,1,4,1);
-    const headShape=new THREE.CylinderGeometry(.10,.13,.57,4,1);
-    const torsoShape=new THREE.CylinderGeometry(.26,.145,.72,4,1);
-    const hipShape=new THREE.BoxGeometry(.32,.19,.23);
-    const jointShape=new THREE.IcosahedronGeometry(.09,0);
+    const limbShape=new THREE.CylinderGeometry(.075,.085,1,12,1);
+    const headShape=new THREE.SphereGeometry(1,20,16).scale(.14,.38,.16);
+    const torsoShape=new THREE.CylinderGeometry(.24,.145,.72,16,1).scale(1,1,.85);
+    const hipShape=new THREE.SphereGeometry(1,16,10).scale(.18,.17,.15);
+    const jointShape=new THREE.SphereGeometry(.085,12,8);
+    const guestColors=[0xef20df,0xcdff24,0x29f5cb,0xf3eada,0xf44069];
+    const guestMaterials=guestColors.map(color=>new THREE.MeshBasicMaterial({color}));
+    const headMaterial=new THREE.MeshStandardMaterial({
+      color:0x202a24,roughness:.95,metalness:0,flatShading:false,
+      emissive:0x202a24,emissiveIntensity:.18
+    });
     const lampMaterial=new THREE.MeshBasicMaterial({color:0xcaff82});
     const ghostMaterials=[0x00ffe8,0xff21d4].map(color=>new THREE.MeshBasicMaterial({
       color,wireframe:true,transparent:true,opacity:.2,depthWrite:false
@@ -72,7 +78,9 @@
       addBox(0,4.62,-16,20,.18,32,0x131118);
       // Wall meshes and collision bounds are created by the same operation.
       addSolid(-10.15,-16,.3,32.6,4.7,0x2b2334);
-      addSolid(10.15,-16,.3,32.6,4.7,0x262a2a);
+      addSolid(10.15,-3.425,.3,7.15,4.7,0x262a2a);
+      addSolid(10.15,-21.15,.3,22.3,4.7,0x262a2a);
+      addBox(10.15,3.85,-8.5,.3,1.7,3,0x262a2a);
       addSolid(0,.15,20,.3,4.7,0x24202b);
       addSolid(0,-32.15,20,.3,4.7,0x273033);
       addSolid(-8.4,-24,3.2,.25,4.7,0x33313f);
@@ -95,7 +103,31 @@
         addBox(0,4.3,-depth,20,.1,.12,0x55505d);
         addStrip(-1,4.21,-depth,2.2,.08,depth%8?0xdf8644:0x7199ee);
       }
-      buildBar();buildBathroom();buildBooth();buildLights();
+      buildBar();buildBathroom();buildSmokingRoom();buildBooth();buildLights();
+    }
+    function readRoomDistance(){
+      const bathroom=Math.max(0,Math.min(1,(-player.z-23.5)/3));
+      const smoking=Math.max(0,Math.min(1,(player.x-9.5)/3));
+      return Math.max(bathroom,smoking);
+    }
+    function buildSmokingRoom(){
+      addBox(14.2,-.08,-9,8,.16,8,0x171b22);
+      addBox(14.2,4.62,-9,8,.18,8,0x11131a);
+      addSolid(18.3,-9,.3,8.3,4.7,0x171a21);
+      addSolid(14.25,-4.85,8.4,.3,4.7,0x1c2027);
+      addSolid(14.25,-13.15,8.4,.3,4.7,0x1c2027);
+      for(const z of [-6,-12]){
+        addSolid(15.2,z,4,.7,.5,0x292a30);
+        addBox(15.2,.9,z+(z===-6?.3:-.3),4,.12,.9,0x282d34);
+      }
+      addSolid(16,-9,.9,.9,.7,0x343943);
+      const ashtray=new THREE.Mesh(new THREE.CylinderGeometry(.15,.12,.045,12),getMaterial(0x5d6570));
+      ashtray.position.set(16,.74,-9);scene.add(ashtray);
+      addSign('SMOKING ROOM',9.96,3.3,-8.5,0x82958e,2.8,-Math.PI/2);
+      addSign('DANCE FLOOR',10.34,3.3,-8.5,0x82958e,2.8,Math.PI/2);
+      const lamp=new THREE.PointLight(0xa3bda9,3,7,2);
+      lamp.position.set(15,2.8,-9);scene.add(lamp);
+      addBox(15,2.9,-9,.3,.08,.3,0x718378,.2);
     }
     function buildBar(){
       addSolid(-8.05,-8,1.25,8,1.08,0x392742);
@@ -118,6 +150,30 @@
       }
       addGuest(-8.85,-9.8,14,true);
     }
+    const bathroomSpots=[];
+    const recoveryAmount={water:.3,toilet:.55};
+    const recoveryDuration={water:2,toilet:3.5};
+    let bathroomAction=null;
+    function addBathroomSpot(kind,x,z){
+      const particles=new THREE.Group();
+      const shape=kind==='water'?new THREE.SphereGeometry(.035,6,4):new THREE.BoxGeometry(.045,.045,.045);
+      const material=new THREE.MeshBasicMaterial({
+        color:kind==='water'?0x80edff:0xe4faff,toneMapped:false
+      });
+      const glow=new THREE.MeshBasicMaterial({
+        color:0x72cfff,transparent:true,opacity:.16,depthWrite:false,
+        blending:THREE.AdditiveBlending,toneMapped:false
+      });
+      for(let index=0;index<(kind==='water'?14:5);index++){
+        const drop=new THREE.Mesh(shape,material);
+        if(kind==='toilet'){
+          const halo=new THREE.Mesh(shape,glow);halo.scale.setScalar(1.9);drop.add(halo);
+        }
+        particles.add(drop);
+      }
+      particles.visible=false;scene.add(particles);
+      bathroomSpots.push({kind,x,z,particles});
+    }
     function buildBathroom(){
       const bathFloor=new THREE.Mesh(new THREE.PlaneGeometry(20,7.9),new THREE.MeshStandardMaterial({color:0xabb6ad,roughness:.8}));
       bathFloor.rotation.x=-Math.PI/2;bathFloor.position.set(0,.006,-28.05);scene.add(bathFloor);
@@ -128,11 +184,16 @@
       for(const x of [.5,3.5]){
         addSolid(x,-31,.62,.82,.5,0xdee8d8);
         addBox(x,.78,-31.65,.65,.9,.25,0xdde4d6);
+        const seat=new THREE.Mesh(new THREE.TorusGeometry(.24,.055,6,16),getMaterial(0xf1fff6));
+        seat.rotation.x=Math.PI/2;seat.position.set(x,.55,-30.9);scene.add(seat);
+        addBathroomSpot('toilet',x,-30.05);
       }
       addSolid(8.8,-28,1.35,4.9,.85,0x93b3a4);
       for(const z of [-26.5,-28,-29.5]){
         addBox(8.7,.9,z,1.16,.15,.9,0xd3eee1);
         addBox(9.1,1.1,z,.08,.27,.08,0x89bcb1);
+        addBox(8.35,1.06,z,.3,.08,.08,0x89bcb1);
+        addBathroomSpot('water',7.7,z);
       }
       addBox(9.97,2,-28,.035,1.6,4.8,0x668b91,.18);
       addSign('WATER',9.94,3,-28,0xb5ffed,2.1,-Math.PI/2);
@@ -184,6 +245,7 @@
     }
     function addLimb(parent,x,y,z,upperLength,lowerLength,material){
       const pivot=new THREE.Group();pivot.position.set(x,y,z);parent.add(pivot);
+      addPart(jointShape,material,0,0,0,pivot);
       const upper=addPart(limbShape,material,0,-upperLength/2,0,pivot);upper.scale.y=upperLength;
       const elbow=new THREE.Group();elbow.position.y=-upperLength;pivot.add(elbow);
       addPart(jointShape,material,0,0,0,elbow);
@@ -193,25 +255,25 @@
     function addGuest(x,z,index,stationary=false){
       const root=new THREE.Group();root.position.set(x,0,z);scene.add(root);
       const body=new THREE.Group();body.position.y=1.05;root.add(body);
-      const coat=getMaterial(colors[index%colors.length],.24);
-      const skin=coat;
+      const coat=guestMaterials[index%guestMaterials.length];
+      const skin=headMaterial;
       const trousers=coat;
-      const torso=addPart(torsoShape,coat,0,.31,0,body);torso.rotation.y=Math.PI/4;
-      addPart(hipShape,trousers,0,-.09,0,body);
-      const head=addPart(headShape,skin,0,.97,0,body);head.scale.set(1,1,1);head.rotation.x=-.12;
+      addPart(torsoShape,coat,0,.31,0,body);
+      addPart(hipShape,trousers,0,-.055,0,body);
+      const head=addPart(headShape,skin,0,1.04,0,body);head.rotation.x=-.12;
       const leftArm=addLimb(body,-.23,.58,0,.35,.32,coat);
       const rightArm=addLimb(body,.23,.58,0,.35,.32,coat);
       const leftLeg=addLimb(body,-.12,-.15,0,.42,.4,trousers);
       const rightLeg=addLimb(body,.12,-.15,0,.42,.4,trousers);
       const ghosts=ghostMaterials.map((material,offset)=>{
-        const echo=new THREE.Group();echo.position.x=(offset?1:-1)*.065;body.add(echo);
-        const chest=addPart(torsoShape,material,0,.25,0,echo);chest.rotation.y=Math.PI/4;
-        addPart(headShape,material,0,.7,0,echo);return echo;
+        const echo=new THREE.Group();echo.visible=false;echo.position.x=(offset?1:-1)*.065;body.add(echo);
+        addPart(torsoShape,material,0,.31,0,echo);
+        addPart(headShape,material,0,1.04,0,echo);return echo;
       });
       const guest={x,z,index,root,body,head,leftArm,rightArm,leftLeg,rightLeg,ghosts,stationary,shared:false,radius:.27};
-      // Back-facing shells provide a luminous silhouette while preserving solid facets.
+      // Back-facing shells provide a luminous silhouette while preserving the continuous body contour.
       const surfaces=[];body.traverse(object=>{if(object.isMesh&&!ghosts.some(e=>e===object.parent))surfaces.push(object);});
-      const haloMaterial=new THREE.MeshBasicMaterial({color:colors[(index+2)%colors.length],side:THREE.BackSide,transparent:true,opacity:.38,depthWrite:false});
+      const haloMaterial=new THREE.MeshBasicMaterial({color:0xf1ffe8,side:THREE.BackSide,transparent:true,opacity:.38,depthWrite:false});
       surfaces.forEach(part=>{const halo=new THREE.Mesh(part.geometry,haloMaterial);halo.scale.setScalar(1.12);part.add(halo);});
       if(stationary){root.rotation.y=Math.PI/2;leftArm.pivot.rotation.x=-.45;rightArm.pivot.rotation.x=-.45;leftArm.elbow.rotation.x=-1.1;rightArm.elbow.rotation.x=-1.1;}
       root.rotation.y=stationary?Math.PI/2:index*2.37;root.scale.setScalar(.91+(index%4)*.045);guests.push(guest);return guest;
@@ -230,6 +292,7 @@
     function rhythmMultiplier(combo){return Math.min(4,1+Math.floor(Math.max(0,combo)/10));}
     function animateGuest(guest,time){
       if(guest.stationary)return;
+      updateGuestDrink(guest);
       const external=window.clubAudioFrame;
       const multiplier=rhythmMultiplier(rhythmCombo);
       const expression=softMode?1:1+(multiplier-1)*.16;
@@ -259,6 +322,11 @@
       guest.rightLeg.elbow.rotation.x=Math.max(0,pose(0))*.65*strength;
       guest.ghosts.forEach((echo,index)=>{echo.visible=false;echo.position.x=(index?1:-1)*(.06+Math.abs(pose(0))*.09);});
       if(guest.shared)guest.body.rotation.y+=Math.sin(phase*1.5)*.18;
+      if(guest.drinkUntil>elapsed){
+        guest.rightArm.pivot.rotation.set(-2.3,0,-.25);
+        guest.rightArm.elbow.rotation.x=-1.2;
+        guest.head.rotation.x=-.18;
+      }else guest.head.rotation.x=-.12;
     }
     function findContact(point,box,radius){
       const nearX=Math.max(box.minX,Math.min(box.maxX,point.x));
@@ -341,32 +409,100 @@
       },null);
     }
     function drinkCup(){
+      if(bathroomAction)return;
       if(!drinks){showMessage('Your glass is empty. E at the bar to order.');return;}
       if(elapsed<sipUntil)return;
       sipUntil=elapsed+.85;sipsLeft--;tipsiness=Math.min(1,tipsiness+.22);
       if(sipsLeft===0){drinks--;sipsLeft=6;}
       showMessage(drinks?`A sip. ${sipsLeft} sips left · Q: drink`:'Glass empty. E or click at the bar for another.');
     }
-    function leaveSeat(){seatedAtBar=false;player.x=-5.75;player.z=-8;}
-    function interact(){
-      if(seatedAtBar){drinks=Math.min(3,drinks+1);showMessage('A fresh glass. Q: sip · X: stand up');return;}
-      if(player.x<-5.5&&player.x>-7.35&&player.z<-3.5&&player.z>-12.5){
-        drinks=2;sipsLeft=6;showMessage('Two drinks. Approach someone and press E to share.');score.resonate();return;
+    const guestDrinkDuration=3;
+    function updateGuestDrink(guest){
+      if(guest.cup)guest.cup.visible=guest.drinkUntil>elapsed;
+    }
+    function giveGuestDrink(guest){
+      if(guest.drinkUntil>elapsed){showMessage('They are still drinking. Give them a moment.');return;}
+      if(!guest.cup){
+        guest.cup=new THREE.Mesh(new THREE.CylinderGeometry(.075,.055,.2,8),
+          new THREE.MeshBasicMaterial({color:0xffca55}));
+        guest.cup.position.set(0,-.34,0);guest.rightArm.elbow.add(guest.cup);
       }
-      if(player.z<-24.5){showMessage('Breathe. Cold water, still light. The dance floor continues outside.');pulse=.25;return;}
+      drinks--;sipsLeft=6;guest.shared=true;guest.drinkUntil=elapsed+guestDrinkDuration;
+      guest.cup.visible=true;dancing=true;score.resonate();
+      showMessage(`They take your glass and drink. Remaining: ${drinks} · Space: dance together.`);
+    }
+    function nearestBathroom(){
+      return bathroomSpots.find(spot=>Math.hypot(player.x-spot.x,player.z-spot.z)<.95);
+    }
+    function useBathroom(){
+      if(bathroomAction)return;
+      const spot=nearestBathroom();
+      if(!spot){showMessage('Water fountains on the right · toilets in the rear stalls.');return;}
+      bathroomAction={spot,started:elapsed};dancing=false;
+      showMessage(spot.kind==='water'?'Drinking water… stay by the fountain.':'Mouse / drag: aim the light pulses · stay here to finish.',
+        recoveryDuration[spot.kind]);
+    }
+    function aimBathroomPulse(drop,index,time){
+      const cycle=softMode?1.4:.9,flight=.16,spacing=.09;
+      const age=(time%cycle-index*spacing)/flight;
+      drop.visible=age>=0&&age<=1;
+      if(!drop.visible)return;
+      const pitch=player.pitch-.25,reach=.25+age*.7;
+      drop.position.set(
+        player.x+Math.sin(player.angle)*Math.cos(pitch)*reach,
+        .9+Math.sin(pitch)*reach-.35*age*age,
+        player.z-Math.cos(player.angle)*Math.cos(pitch)*reach
+      );
+      drop.scale.setScalar(.85*(1-age*.65));
+    }
+    function updateBathroom(){
+      if(!bathroomAction)return;
+      const {spot,started}=bathroomAction,progress=(elapsed-started)/recoveryDuration[spot.kind];
+      if(Math.hypot(player.x-spot.x,player.z-spot.z)>=.95){
+        spot.particles.visible=false;bathroomAction=null;showMessage('Action cancelled.');return;
+      }
+      spot.particles.visible=true;
+      spot.particles.children.forEach((drop,index)=>{
+        if(spot.kind==='water'){
+          const t=(index/14+(elapsed-started)*.9)%1;
+          drop.position.set(8.35-t*.5,1.1+Math.sin(t*Math.PI)*.25,spot.z);
+        }else aimBathroomPulse(drop,index,elapsed-started);
+      });
+      if(progress<1)return;
+      tipsiness=Math.max(0,tipsiness-recoveryAmount[spot.kind]);
+      spot.particles.visible=false;bathroomAction=null;
+      showMessage(spot.kind==='water'?'Water helps you steady yourself.':'You feel steadier. Back to the dance floor.');
+    }
+    function leaveSeat(){seatedAtBar=false;player.x=-5.75;player.z=-8;}
+    function orderDrink(){
+      if(drinks){showMessage('You already have a glass. Q: sip · E near someone: give it away.');return;}
+      drinks=1;sipsLeft=6;
+      showMessage('One glass. Q: sip · E near someone: give it away.');score.resonate();
+    }
+    function interact(){
+      if(seatedAtBar){orderDrink();return;}
+      if(player.x<-5.5&&player.x>-7.35&&player.z<-3.5&&player.z>-12.5){
+        orderDrink();return;
+      }
+      if(player.z<-24.5){useBathroom();return;}
       const near=nearestGuest();
       if(near){
+        if(drinks>0){giveGuestDrink(near.guest);return;}
         near.guest.shared=true;dancing=true;score.resonate();
-        if(drinks>0){drinks--;sipsLeft=6;showMessage(`You share a drink and dance together. Remaining: ${drinks}.`);}
-        else showMessage('They follow your rhythm. Space to dance · walk to stop.');
+        showMessage('They follow your rhythm. Space to dance · walk to stop.');
       }else showMessage('BAR on the left · RESTROOM at the back · E near someone to say hello.');
     }
     function updateHints(){
       if(elapsed<messageUntil)return;
       if(seatedAtBar){hint.textContent='E: order a glass · Q: sip · X: stand up';return;}
       if(Math.hypot(player.x+6.7,player.z+8)<1.65){hint.textContent='Empty stool · X: sit · E / click: get drinks';return;}
+      if(player.x>10.3){hint.textContent='SMOKING ROOM · a quiet corner · return through the doorway';return;}
+      if(player.z<-24.5){
+        const spot=nearestBathroom();
+        hint.textContent=spot?(spot.kind==='water'?'E / click: drink water · reduces drunkenness':'E / click: use toilet · reduces drunkenness'):'RESTROOM · water fountains right · toilets in rear stalls';
+        return;
+      }
       if(dancing){hint.textContent='Dancing · B to stop · Space on the beat · WASD to walk';return;}
-      if(player.z<-24.5){hint.textContent='RESTROOM · E: breathe · return through the lit doorway';return;}
       if(player.x<-5.5&&player.z<-3.5&&player.z>-12.5){hint.textContent='BAR · E: get drinks · Q: sip';return;}
       if(nearestGuest()){hint.textContent=drinks?'E: share a drink · Space: dance / tap beat':'E: say hello · Space: dance / tap beat';return;}
       hint.textContent='C: crouch · Space: dance / tap beat · WASD: walk · Shift: run · M: music source · Q: drink · mouse / drag: look · J/R: turn · E / click: interact · Space: dance / tap beat · L: lights';
@@ -390,19 +526,19 @@
       const dizzy=softMode?0:tipsiness;
       camera.position.set(player.x,(seatedAtBar?1.45:1.64)-crouch*.7+jump+bob,player.z);
       canvas.style.filter=tipsiness>0.01?`blur(${(tipsiness*(softMode?.65:4.2)).toFixed(2)}px)`:'';
-      camera.rotation.set(player.pitch+Math.sin(elapsed*.85)*dizzy*.065,-player.angle+Math.sin(elapsed*.6)*dizzy*.055,sway+Math.sin(elapsed*1.2)*dizzy*.105,'YXZ');
+      camera.rotation.set(player.pitch+(bathroomAction?.spot.kind==='toilet'?-.25:0)+Math.sin(elapsed*.85)*dizzy*.065,-player.angle+Math.sin(elapsed*.6)*dizzy*.055,sway+Math.sin(elapsed*1.2)*dizzy*.105,'YXZ');
     }
     function updateWorld(dt){
       if(!playing)return;
       if(window.clubAudioFrame?.active)beatCount=window.clubAudioFrame.phase/(Math.PI*2);else beatCount+=dt*132/60;
       if(elapsed-lastRhythmTime>1.2){rhythmEnergy=Math.max(0,rhythmEnergy-dt*.18);rhythmCombo=0;}
-      elapsed+=dt;pulse=Math.max(0,pulse-dt*1.4);updatePlayer(dt);
+      elapsed+=dt;pulse=Math.max(0,pulse-dt*1.4);updateBathroom();updatePlayer(dt);window.clubRoomDistance=readRoomDistance();
       for(const [index,signal] of signals.entries()){
         if(!signal.got&&Math.hypot(signal.x-player.x,signal.z-player.z)<1.65){
           signal.got=true;pips[index].classList.add('on');pulse=.7;score.resonate();
         }
       }
-      chapter.textContent=`${player.z<-24.1?'restroom':player.x<-5.5&&player.z>-13?'bar':'dance floor'} · ${softMode?'gentle lights':'strobe'} · ×${rhythmMultiplier(rhythmCombo)}${drinks?' · '+drinks+' glasses · '+sipsLeft+'/6 sips':''}`;
+      chapter.textContent=`${player.x>10.3?'smoking room':player.z<-24.1?'restroom':player.x<-5.5&&player.z>-13?'bar':'dance floor'} · ${softMode?'gentle lights':'strobe'} · ×${rhythmMultiplier(rhythmCombo)}${drinks?' · '+drinks+' glasses · '+sipsLeft+'/6 sips':''}`;
       timer.textContent=`${String(Math.floor(elapsed/60)).padStart(2,'0')}:${String(Math.floor(elapsed%60)).padStart(2,'0')}`;
       updateHints();
     }
@@ -497,8 +633,8 @@
         const surface=document.createElement('canvas');surface.width=512;surface.height=256;
         wallBrush=surface.getContext('2d');wallTexture=new THREE.CanvasTexture(surface);wallTexture.colorSpace=THREE.SRGBColorSpace;
         const material=new THREE.MeshBasicMaterial({map:wallTexture,transparent:true,opacity:.68,depthWrite:false,side:THREE.DoubleSide,toneMapped:false});
-        for(const x of [-9.96,9.96])for(const z of [-16]){
-          const panel=new THREE.Mesh(new THREE.PlaneGeometry(31.9,4.45),material);
+        for(const [x,z,width] of [[-9.96,-16,31.9],[9.96,-3.5,6.9],[9.96,-21,21.9]]){
+          const panel=new THREE.Mesh(new THREE.PlaneGeometry(width,4.45),material);
           panel.position.set(x,2.3,z);panel.rotation.y=x<0?Math.PI/2:-Math.PI/2;scene.add(panel);
         }
         const ceiling=new THREE.Mesh(new THREE.PlaneGeometry(16,20),material);ceiling.rotation.x=Math.PI/2;ceiling.position.set(0,4.49,-12);scene.add(ceiling);
@@ -515,17 +651,78 @@
       }
       c.globalAlpha=1;wallTexture.needsUpdate=true;
     }
+    const projectionState={clubPhase:{value:0},clubStrength:{value:0}};
+    let colorPass;
+    function projectMaterial(material){
+      if(material.transparent||(material.map&&material!==floor.material)||material.userData.clubProjection)return;
+      material.userData.clubProjection=true;
+      material.onBeforeCompile=shader=>{
+        Object.assign(shader.uniforms,projectionState);
+        shader.vertexShader='varying vec3 clubPosition;\n'+shader.vertexShader;
+        shader.vertexShader=shader.vertexShader.replace('#include <project_vertex>',
+          '#include <project_vertex>\nclubPosition=(modelMatrix*vec4(transformed,1.)).xyz;');
+        shader.fragmentShader='varying vec3 clubPosition;uniform float clubPhase;uniform float clubStrength;\n'+shader.fragmentShader;
+        shader.fragmentShader=shader.fragmentShader.replace('#include <tonemapping_fragment>',`
+          float clubBand=sin(clubPosition.x*2.8+clubPosition.y*4.2+clubPosition.z*1.6-clubPhase);
+          vec3 clubInk=step(vec3(.0),sin(vec3(0.,2.094,4.188)+clubBand*2.4+clubPhase*.3));
+          float clubMask=smoothstep(-.25,.25,clubBand);
+          float clubRoom=smoothstep(-25.,-23.,clubPosition.z)*(1.-smoothstep(9.7,10.4,clubPosition.x));
+          vec3 clubColor=mix(vec3(.008),mix(clubInk,vec3(1.,1.,.82),step(.88,clubBand)),clubMask);
+          gl_FragColor.rgb=mix(gl_FragColor.rgb,clubColor,clubStrength*clubRoom);
+          #include <tonemapping_fragment>
+        `);
+      };
+      material.needsUpdate=true;
+    }
+    function createColorPass(){
+      const target=new THREE.WebGLRenderTarget(1,1,{depthBuffer:true});
+      const uniforms={image:{value:target.texture},pixel:{value:new THREE.Vector2(1,1)},strength:{value:0}};
+      const material=new THREE.ShaderMaterial({
+        uniforms,depthTest:false,depthWrite:false,toneMapped:false,
+        vertexShader:'varying vec2 screenUv;void main(){screenUv=uv;gl_Position=vec4(position.xy,0.,1.);}',
+        fragmentShader:`
+          varying vec2 screenUv;uniform sampler2D image;uniform vec2 pixel;uniform float strength;
+          void main(){
+            vec2 offset=pixel*vec2(2.5,1.)*strength;
+            vec3 color=vec3(texture2D(image,screenUv+offset).r,
+              texture2D(image,screenUv).g,texture2D(image,screenUv-offset).b);
+            vec2 ray=(screenUv-.5)*.012*strength;
+            vec3 echo=texture2D(image,screenUv-ray).rgb;
+            color=max(color,echo*.22*strength);
+            color=mix(color,smoothstep(vec3(.06),vec3(.85),color),strength*.4);
+            gl_FragColor=vec4(color,1.);
+            #include <colorspace_fragment>
+          }
+        `
+      });
+      const view=new THREE.Scene();
+      view.add(new THREE.Mesh(new THREE.PlaneGeometry(2,2),material));
+      return {target,uniforms,view,camera:new THREE.Camera()};
+    }
+    function renderClub(){
+      const intense=playing&&!softMode&&readRoomDistance()<.7;
+      projectionState.clubPhase.value=intense?beatCount*.65:0;
+      projectionState.clubStrength.value=intense?.86:0;
+      if(!intense){renderer.render(scene,camera);return;}
+      colorPass.uniforms.strength.value=.65+Math.min(1,rhythmEnergy)*.35;
+      renderer.setRenderTarget(colorPass.target);renderer.render(scene,camera);
+      renderer.setRenderTarget(null);renderer.render(colorPass.view,colorPass.camera);
+    }
     function resizeScene(){
       const bounds=canvas.getBoundingClientRect();
       renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.5));renderer.setSize(bounds.width,bounds.height,false);
       camera.aspect=bounds.width/Math.max(1,bounds.height);camera.updateProjectionMatrix();
+      if(colorPass){
+        const size=renderer.getDrawingBufferSize(new THREE.Vector2());
+        colorPass.target.setSize(size.x,size.y);colorPass.uniforms.pixel.value.set(1/size.x,1/size.y);
+      }
     }
     function drawFrame(time){
       const dt=Math.min(.08,Math.max(0,(time-last)/1000||0));last=time;
       if(!document.hidden){
         clockTime+=dt;updateWorld(dt);
         guests.forEach(guest=>animateGuest(guest,clockTime));updateLights();updateScreen();updateWallEffects();updateFloorEffects();updateHeldDrink();updateBeatGuide();
-        renderer.render(scene,camera);
+        renderClub();
       }
       requestAnimationFrame(drawFrame);
     }
@@ -539,8 +736,10 @@
     }
     function start(soft=true){
       softMode=soft||matchMedia('(prefers-reduced-motion: reduce)').matches;
+      bathroomAction=null;bathroomSpots.forEach(spot=>spot.particles.visible=false);
       playing=true;rhythmEnergy=0;rhythmCombo=0;lastRhythmBeat=-Infinity;lastRhythmTime=-Infinity;seatedAtBar=false;tipsiness=0;elapsed=0;beatCount=0;pulse=0;dancing=false;drinks=0;sipsLeft=6;sipUntil=0;jumpTime=-1;crouch=0;keys.clear();
       Object.assign(player,{x:0,z:-2.5,angle:0,pitch:0});
+      guests.forEach(guest=>{guest.shared=false;guest.drinkUntil=0;if(guest.cup)guest.cup.visible=false;});
       signals.forEach(signal=>signal.got=false);pips.forEach(pip=>pip.classList.remove('on'));
       intro.classList.add('hidden');ending.classList.add('hidden');document.querySelector('main').classList.add('active');
       showMessage('WASD: walk · click: capture mouse · Esc: release · BAR on the left',6);
@@ -607,7 +806,10 @@
         renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;
         scene=new THREE.Scene();scene.background=new THREE.Color(0x08080e);scene.fog=new THREE.FogExp2(0x11101b,.026);
         camera=new THREE.PerspectiveCamera(72,1,.045,65);camera.position.set(0,1.64,-2.5);
-        buildRoom();buildGuests();bindControls();resizeScene();requestAnimationFrame(drawFrame);
+        buildRoom();buildGuests();
+        scene.traverse(object=>{if(object.isMesh)for(const material of [].concat(object.material))projectMaterial(material);});
+        colorPass=createColorPass();
+        bindControls();resizeScene();requestAnimationFrame(drawFrame);
       }catch(error){
         console.error(error);chapter.textContent='WebGL unavailable';
         document.querySelector('.lede').textContent='Could not start the 3D scene. Open in a browser with WebGL and hardware acceleration enabled.';

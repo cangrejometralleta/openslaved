@@ -80,7 +80,9 @@ const delayedPicture=window.clubProjectionCanvas=document.createElement("canvas"
 const tracker=new PulseTracker();
 const projection=window.clubVideoElement=document.createElement('video');projection.muted=true;projection.playsInline=true;projection.autoplay=true;
 const frame=window.clubAudioFrame={active:false,onset:false,bpm:null,energy:0,phase:0,pulse:0};
+let roomSound;
 function release(notify=true){
+  roomSound?.dispose();roomSound=null;
   token++;cancelAnimationFrame(raf);analysisQueue.length=0;videoQueue.length=0;livePhase=0;livePulse=0;delayNode?.disconnect();pictureBrush.clearRect(0,0,480,270);
   if(stream)stream.getTracks().forEach(track=>track.stop());
   stream=null;projection.pause();projection.srcObject=null;source?.disconnect();analyser?.disconnect();muted?.disconnect();
@@ -91,6 +93,7 @@ function release(notify=true){
 }
 function sample(now){
   if(!frame.active)return;
+  roomSound?.update();
   const t=context.currentTime,dt=Math.min(.1,Math.max(0,t-last));last=t;
   analyser.getFloatFrequencyData(spectrum);
   const bass=bassEnergy(spectrum,context.sampleRate,analyser.fftSize);
@@ -129,7 +132,7 @@ async function capture(){
     // Analyze ahead; play audio and project frames with the same two-second delay.
     muted=context.createGain();muted.gain.value=0;
     source.connect(analyser);analyser.connect(muted);muted.connect(context.destination);
-    delayNode=context.createDelay(2.5);delayNode.delayTime.value=syncDelay;source.connect(delayNode);delayNode.connect(context.destination);
+    delayNode=context.createDelay(2.5);delayNode.delayTime.value=syncDelay;source.connect(delayNode);roomSound=createRoomSound(context,context.destination);delayNode.connect(roomSound.input);
     stream.getTracks().forEach(track=>track.addEventListener('ended',()=>{if(frame.active){release();status.textContent='Capture ended · internal music active';}}));
     frame.active=true;frame.ready=false;delete frame.time;last=context.currentTime;lastVideo=-1;
     button.disabled=false;button.textContent='Stop sharing';

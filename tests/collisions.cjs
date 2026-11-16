@@ -18,7 +18,7 @@ const source=fs.readFileSync(path.join(__dirname,'../src/engine.js'),'utf8');
 const instrumented=source.replace('    bootScene();',`    globalThis.game={player,solids,guests,movePlayer,readMovement,resolvePosition,findContact,
       createWorld(){scene=new THREE.Scene();buildRoom();buildGuests();return scene;},
       animate(time){guests.forEach(guest=>animateGuest(guest,time));},
-      interact, get drinks(){return drinks;},get dancing(){return dancing;},
+      interact,drinkCup,updateBathroom,readRoomDistance, get tipsiness(){return tipsiness;},get bathroomAction(){return bathroomAction;}, get drinks(){return drinks;},get dancing(){return dancing;},
       advance(seconds){elapsed+=seconds;return elapsed;}};`);
 vm.runInContext(instrumented,sandbox);
 const game=sandbox.game;
@@ -52,7 +52,7 @@ check('bathroom divider blocks movement away from the doorway',()=>{
 });
 check('the bar approach remains accessible and offers drinks',()=>{
   position(-5.5,-3);game.movePlayer(0,-3);near(game.player.z,-6);
-  game.movePlayer(-1.3,0);near(game.player.x,-6.8);game.interact();assert.equal(game.drinks,2);clearOfWalls();
+  game.movePlayer(-1.3,0);near(game.player.x,-6.8);game.interact();assert.equal(game.drinks,1);game.interact();assert.equal(game.drinks,1);clearOfWalls();
 });
 check('bar counter stops the player at the actual counter face',()=>{
   position(-6.8,-6);game.movePlayer(-3,0);near(game.player.x,-7.135);clearOfWalls();
@@ -77,8 +77,18 @@ check('guests have solid personal space and articulated bodies',()=>{
   const before=guest.leftArm.elbow.rotation.x;game.animate(1.27);assert.notEqual(guest.leftArm.elbow.rotation.x,before);
 });
 check('sharing a drink triggers a dance without a countdown ending',()=>{
-  game.interact();assert.equal(game.drinks,1);assert.equal(game.dancing,true);
-  assert.equal(game.advance(36000),36000);
+  game.interact();assert.equal(game.drinks,0);assert.equal(game.dancing,true);
+  const recipient=game.guests.find(guest=>guest.cup?.visible);
+  assert.ok(recipient,'recipient visibly holds the glass');
+  assert.equal(recipient.cup.parent,recipient.rightArm.elbow);
+  const drinkUntil=recipient.drinkUntil;
+  game.interact();assert.equal(game.drinks,0,'one glass allows only one gift');
+  assert.equal(recipient.drinkUntil,drinkUntil,'empty hands cannot start another drink');
+  game.animate(1);assert.equal(recipient.rightArm.pivot.rotation.x,-2.3);
+  game.advance(4);game.animate(4);assert.equal(recipient.cup.visible,false);
+  game.interact();assert.equal(game.drinks,0);
+  assert.equal(recipient.cup.visible,false,'no second glass appears after the first is finished');
+  assert.equal(game.advance(36000),36004);
   assert.ok(!source.includes('function finish('));
 });
 check('world builds true meshes with finite geometry bounds',()=>{
@@ -89,3 +99,69 @@ check('world builds true meshes with finite geometry bounds',()=>{
 console.log(`${passed} checks passed`);
 
 check("seated guests and staff retain fixed poses across beats",()=>{const fixed=game.guests.filter(g=>g.stationary);assert.equal(fixed.filter(g=>g.seated).length,2);const snapshot=()=>JSON.stringify(fixed.map(g=>[g.root.rotation.toArray(),g.body.position.toArray(),g.leftArm.pivot.rotation.toArray(),g.leftLeg.pivot.rotation.toArray()]));const before=snapshot();game.animate(20);game.animate(44);assert.equal(snapshot(),before);});
+
+check('seated guests and staff never display wireframe echoes',()=>{
+  const fixed=game.guests.filter(guest=>guest.stationary);
+  assert.ok(fixed.length>0);
+  for(const guest of fixed){
+    for(const echo of guest.ghosts)assert.equal(echo.visible,false);
+  }
+  game.animate(60);
+  for(const guest of fixed){
+    for(const echo of guest.ghosts)assert.equal(echo.visible,false);
+  }
+});
+
+check('water and toilets reduce drunkenness only after a completed nearby action',()=>{
+  position(-6,-8);game.interact();game.drinkCup();
+  near(game.tipsiness,.22);
+  position(0,-26);game.interact();assert.equal(game.bathroomAction,null);
+  position(7.7,-28);game.interact();
+  assert.equal(game.bathroomAction.spot.kind,'water');
+  game.interact();game.advance(1);game.updateBathroom();near(game.tipsiness,.22);
+  position(5,-27);game.updateBathroom();assert.equal(game.bathroomAction,null);near(game.tipsiness,.22);
+  position(7.7,-28);game.interact();game.advance(2);game.updateBathroom();near(game.tipsiness,0);
+  game.drinkCup();game.advance(1);game.drinkCup();near(game.tipsiness,.44);
+  position(.5,-30.05);game.interact();assert.equal(game.bathroomAction.spot.kind,'toilet');
+  game.advance(3.5);game.updateBathroom();near(game.tipsiness,0);
+  assert.equal(game.bathroomAction,null);
+});
+
+check('toilet light pulses have dark gaps and follow horizontal and vertical aim',()=>{
+  position(.5,-30.05);game.player.angle=0;game.player.pitch=0;game.interact();
+  game.advance(.1);game.updateBathroom();
+  const particles=game.bathroomAction.spot.particles;
+  const drop=particles.children[0];
+  assert.equal(drop.visible,true);
+  assert.ok(particles.children.filter(particle=>particle.visible).length<=2,
+    'brief drops stay separated rather than forming a stream');
+  assert.equal(drop.material.color.getHex(),0xe4faff);
+  assert.equal(drop.children[0].material.blending,THREE.AdditiveBlending);
+  const forward=drop.position.clone();
+  game.player.angle=Math.PI/2;game.updateBathroom();
+  assert.ok(drop.position.x>forward.x);
+  assert.ok(drop.position.z>forward.z);
+  const low=drop.position.y;
+  game.player.pitch=.5;game.updateBathroom();assert.ok(drop.position.y>low);
+  game.advance(.08);game.updateBathroom();
+  assert.equal(drop.visible,false,'each drop disappears within a fraction of a second');
+  game.advance(.42);game.updateBathroom();
+  assert.ok(particles.children.every(particle=>!particle.visible),'entire effect pauses between bursts');
+  game.advance(3);game.updateBathroom();assert.equal(particles.visible,false);
+});
+
+check('smoking room doorway is traversable and its outer walls contain the player',()=>{
+  position(8.8,-8.5);game.movePlayer(5,0);near(game.player.x,13.8);clearOfWalls();
+  assert.equal(game.readRoomDistance(),1);
+  game.movePlayer(20,0);near(game.player.x,17.86);clearOfWalls();
+  game.movePlayer(-9,0);assert.ok(game.player.x<10);clearOfWalls();
+  position(9,-6);game.movePlayer(4,0);near(game.player.x,9.71);
+});
+check('music distance fades in both quiet rooms and clears on the dance floor',()=>{
+  position(0,-10);near(game.readRoomDistance(),0);
+  position(11,-8.5);near(game.readRoomDistance(),.5);
+  position(14,-8.5);near(game.readRoomDistance(),1);
+  position(-5,-25);near(game.readRoomDistance(),.5);
+  position(-5,-28);near(game.readRoomDistance(),1);
+  position(0,-10);near(game.readRoomDistance(),0);
+});
