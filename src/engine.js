@@ -922,14 +922,23 @@
       };
       material.needsUpdate=true;
     }
+    // Ink, midtone and paper sampled by eye from the club sequence.
+    const strobePalettes=[
+      [0x182017,0x627164,0xf2f4cc],
+      [0x182643,0x2b22ad,0xf5ef52],
+      [0x152b20,0xe52398,0x8dffb1],
+      [0x301020,0xe14133,0x60fad9]
+    ].map(row=>row.map(hex=>new THREE.Color(hex)));
+    const strobePhrase=[0,0,1,0,2,0,3,1];
     function createColorPass(){
       const target=new THREE.WebGLRenderTarget(1,1,{depthBuffer:true});
       const uniforms={image:{value:target.texture},pixel:{value:new THREE.Vector2(1,1)},strength:{value:0}};
+      for(const [index,name] of ['ink','midtone','paper'].entries())uniforms[name]={value:strobePalettes[0][index]};
       const material=new THREE.ShaderMaterial({
         uniforms,depthTest:false,depthWrite:false,toneMapped:false,
         vertexShader:'varying vec2 screenUv;void main(){screenUv=uv;gl_Position=vec4(position.xy,0.,1.);}',
         fragmentShader:`
-          varying vec2 screenUv;uniform sampler2D image;uniform vec2 pixel;uniform float strength;
+          varying vec2 screenUv;uniform sampler2D image;uniform vec3 ink,midtone,paper;uniform vec2 pixel;uniform float strength;
           void main(){
             vec2 offset=pixel*vec2(2.5,1.)*strength;
             vec3 color=vec3(texture2D(image,screenUv+offset).r,
@@ -937,7 +946,10 @@
             vec2 ray=(screenUv-.5)*.012*strength;
             vec3 echo=texture2D(image,screenUv-ray).rgb;
             color=max(color,echo*.22*strength);
-            color=mix(color,smoothstep(vec3(.06),vec3(.85),color),strength*.4);
+            float light=dot(color,vec3(.2126,.7152,.0722));
+            vec3 printed=mix(ink,midtone,smoothstep(.065,.12,light));
+            printed=mix(printed,paper,smoothstep(.30,.42,light));
+            color=mix(color,printed,.83*strength);
             gl_FragColor=vec4(color,1.);
             #include <colorspace_fragment>
           }
@@ -952,6 +964,9 @@
       projectionState.clubPhase.value=intense?beatCount*.65:0;
       projectionState.clubStrength.value=intense?.86:0;
       if(!intense){renderer.render(scene,camera);return;}
+      const beat=Math.floor(Math.max(0,beatCount));
+      const palette=strobePalettes[strobePhrase[beat%strobePhrase.length]];
+      [colorPass.uniforms.ink.value,colorPass.uniforms.midtone.value,colorPass.uniforms.paper.value]=palette;
       colorPass.uniforms.strength.value=.65+Math.min(1,rhythmEnergy)*.35;
       renderer.setRenderTarget(colorPass.target);renderer.render(scene,camera);
       renderer.setRenderTarget(null);renderer.render(colorPass.view,colorPass.camera);
