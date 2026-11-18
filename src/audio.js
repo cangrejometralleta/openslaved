@@ -28,6 +28,7 @@ function createRoomSound(context,destination){
       let context, output, mix, acid, filter, envelope, duck, echo, noise, roomSound;
       let running=false, enabled=true, nextTime=0, step=0, seenSignals=0;
       let previousPitch=55, previousSlide=false, resonance=0, scheduler, fadeTimer;
+      let phrase, accents, slides, color=1, swing=0;
 
       function setLevel(){
         toggle.textContent=enabled?'Sound: on':'Sound: off';
@@ -107,7 +108,8 @@ function createRoomSound(context,destination){
         if(note===null){envelope.gain.setTargetAtTime(silence,time,.018);previousSlide=false;return;}
         const pitch=55*Math.pow(2,note/12), duration=slide?stepLength*.96:stepLength*.79;
         const sweep=.5+.5*Math.sin(step*Math.PI/128);
-        const cutoff=420+sweep*2600+energy*2600+(accent?3200:0);
+        const cutoff=(420+sweep*2600+energy*2600+(accent?3200:0))*color;
+        filter.Q.setValueAtTime(accent?28:19+color*4,time);
         acid.frequency.setValueAtTime(previousSlide?previousPitch:pitch,time);
         acid.frequency.exponentialRampToValueAtTime(pitch,time+(previousSlide?.065:.004));
         filter.frequency.setValueAtTime(Math.min(5200,cutoff),time);
@@ -133,10 +135,11 @@ function createRoomSound(context,destination){
         const osc=context.createOscillator(), tone=context.createBiquadFilter(), gain=context.createGain(), pan=context.createStereoPanner();
         osc.type='sawtooth';const hz=110*Math.pow(2,note/12);
         osc.frequency.setValueAtTime(hz*(index%3===0?.89:1),time);osc.frequency.exponentialRampToValueAtTime(hz,time+.045);
-        tone.type='lowpass';tone.Q.value=10;tone.frequency.setValueAtTime(3000+(index%3)*700,time);tone.frequency.exponentialRampToValueAtTime(580,time+stepLength*1.7);
+        tone.type='lowpass';tone.Q.value=22;tone.frequency.setValueAtTime((2200+(index%3)*900)*color,time);tone.frequency.exponentialRampToValueAtTime(320,time+stepLength*1.7);
         gain.gain.setValueAtTime(.0001,time);gain.gain.exponentialRampToValueAtTime(.065,time+.008);gain.gain.exponentialRampToValueAtTime(.0001,time+stepLength*2.7);
-        pan.pan.value=Math.sin(index*.8)*.3;osc.connect(tone);tone.connect(gain);gain.connect(pan);pan.connect(mix);gain.connect(echo);
-        osc.start(time);osc.stop(time+stepLength*3);osc.onended=()=>{osc.disconnect();tone.disconnect();gain.disconnect();pan.disconnect();};
+        const drive=makeDrive();
+        pan.pan.value=Math.sin(index*.8)*.3;osc.connect(tone);tone.connect(drive);drive.connect(gain);gain.connect(pan);pan.connect(mix);gain.connect(echo);
+        osc.start(time);osc.stop(time+stepLength*3);osc.onended=()=>{osc.disconnect();tone.disconnect();drive.disconnect();gain.disconnect();pan.disconnect();};
       }
       function readEnergy(){
         const collected=signals.filter(signal=>signal.got).length;
@@ -144,10 +147,24 @@ function createRoomSound(context,destination){
           .map(signal=>Math.hypot(signal.x-player.x,signal.z-player.z)))/10);
         return {collected,level:Math.min(1,.13+collected*.18+proximity*.25+resonance*.4)};
       }
+      function varyPhrase(){
+        const source=patterns[Math.floor(Math.random()*patterns.length)];
+        phrase=source.map((note,index)=>{
+          if(index%4===0)return note;
+          const chance=Math.random();
+          if(chance<.1)return null;
+          if(chance<.24)return [0,3,7,10,12][Math.floor(Math.random()*5)];
+          return note;
+        });
+        accents=phrase.map((note,index)=>index%4===0||Math.random()<.3);
+        slides=phrase.map(()=>Math.random()<.28);
+        color=.75+Math.random()*.65;swing=Math.random()*.12;
+      }
       function arrangeStep(time){
         const position=step%16, bar=Math.floor(step/16), state=readEnergy();
         const breakdown=bar%8===7&&position<8;
-        const pattern=patterns[(Math.floor(bar/4)+state.collected)%patterns.length];
+        if(position===0&&bar%4===0)varyPhrase();
+        const noteTime=time+(position%2?stepLength*swing:0);
         if(state.collected>seenSignals){
           [0,7,12].forEach((note,index)=>playChime(time+index*stepLength,note+state.collected*3,index*.5-.5));
           seenSignals=state.collected;resonance=1;
@@ -155,10 +172,10 @@ function createRoomSound(context,destination){
         if(!breakdown&&position%4===0)playKick(time);
         if(position===4||position===12)playNoise(time,.16,.28,1400,0,true);
         if(position%4===2)playNoise(time,.18,.11,6200,.28);
-        if(position%2===0||state.collected>1)
-          playNoise(time,.035,position%2?.035:.07,7800,-.3);
+        if(position%2===0||Math.random()<.22)
+          playNoise(noteTime,.035,(position%2?.035:.07)*(.8+Math.random()*.4),7800,-.3);
         if(bar%4===3&&position>12)playNoise(time,.055,.08,2100,-.1,true);
-        playAcid(time,pattern[position],position%3===0,[3,6,11,14].includes(position),state.level);
+        playAcid(noteTime,phrase[position],accents[position],slides[position],state.level);
         if(state.collected>0&&position%8===6)
           playChime(time,[0,7,10,15][bar%4],Math.sin(bar)*.65);
         if(bar%8>=6&&position%4===2)playLead(time,position/2,bar);
