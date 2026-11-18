@@ -34,6 +34,12 @@ function clearOfWalls(){
 }
 let passed=0;
 function check(name,run){run();passed++;console.log('PASS '+name);}
+check('the entrance leads from the vestibule through the passage onto the floor',()=>{
+  assert.ok(game.player.z>5);
+  game.movePlayer(-game.player.x,0);game.movePlayer(0,-9);
+  assert.ok(game.player.z<0);clearOfWalls();
+  game.movePlayer(0,15);near(game.player.z,8.11);clearOfWalls();
+});
 check('walking diagonally slides along the exterior wall',()=>{
   position(9,-3);game.movePlayer(4,-4);near(game.player.x,9.71);near(game.player.z,-7);clearOfWalls();
 });

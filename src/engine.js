@@ -6,7 +6,8 @@
     const hint=document.querySelector('#hint'), pips=[...document.querySelectorAll('.pip')];
     const keys=new Set(), solids=[], guests=[], lights=[], beams=[], strobePanels=[];
     window.clubAudioFrame=window.clubAudioFrame||null;
-    const player={x:0,z:-2.5,angle:0,pitch:0,radius:.29};
+    const entranceSpawn={x:3.8,z:7.4,angle:0,pitch:0};
+    const player={...entranceSpawn,radius:.29};
     const signals=[{x:-5,z:-8,got:false},{x:3,z:-15,got:false},{x:-5,z:-28,got:false}];
     const colors=[0xffbc52,0xdf8644,0x7199ee,0xe5d6ac,0x9cafa3];
     let playing=false, elapsed=0, pulse=0, softMode=true, dancing=false, drinks=0, jumpTime=-1, seatedAtBar=false, tipsiness=0, sipsLeft=6;
@@ -84,6 +85,31 @@
       const sign=new THREE.Mesh(new THREE.PlaneGeometry(width,width/4),new THREE.MeshBasicMaterial({map:texture}));
       sign.position.set(x,y,z);sign.rotation.y=angle;scene.add(sign);return sign;
     }
+    function buildEntrance(){
+      // The front wall opens into a narrow passage and a wider vestibule.
+      for(const x of [-5.7,5.7])addSolid(x,.15,8.6,.3,4.7,0x24202b);
+      addBox(0,3.65,.15,2.8,2.1,.3,0x22212b);
+      addBox(0,-.08,2.5,2.8,.16,5,0x272437);
+      addBox(0,2.7,2.5,2.8,.2,5,0x161520);
+      for(const x of [-1.5,1.5])addSolid(x,2.5,.2,5,2.8,0x272635);
+      addBox(2,-.08,6.7,6.8,.16,3.4,0x262631);
+      addBox(2,2.7,6.7,6.8,.2,3.4,0x181822);
+      addSolid(3.5,5.1,3.8,.2,2.8,0x292532);
+      addSolid(2,8.5,7.2,.2,2.8,0x232330);
+      for(const x of [-1.5,5.5])addSolid(x,6.7,.2,3.4,2.8,0x292633);
+      const palette=[0xff48ce,0x71f6df,0xf4efbf];
+      for(let arch=0;arch<5;arch++){
+        const z=.4+arch*1.08,color=palette[arch%palette.length];
+        for(const x of [-1.37,1.37])addBox(x,1.32,z,.045,2.55,.055,color,.65);
+        addStrip(0,2.58,z,2.76,.08,color);
+      }
+      addStrip(1.8,.025,6.3,3.7,.07,0xf4efbf);
+      addStrip(0,.025,3.15,.07,6.3,0xf4efbf);
+      const ring=new THREE.Mesh(new THREE.TorusGeometry(.42,.035,8,48),
+        new THREE.MeshBasicMaterial({color:0xffdb3f}));
+      ring.position.set(3.8,1.65,5.22);scene.add(ring);
+      addSign('← CLUB',2.3,1.65,5.22,0x71f6df,1.15);
+    }
     function buildRoom(){
       floor=new THREE.Mesh(new THREE.PlaneGeometry(20,32),new THREE.MeshStandardMaterial({
         map:makeTiles('#1a1c22','#565550'),roughness:.9,metalness:.1
@@ -95,7 +121,7 @@
       addSolid(10.15,-3.425,.3,7.15,4.7,0x262a2a);
       addSolid(10.15,-21.15,.3,22.3,4.7,0x262a2a);
       addBox(10.15,3.85,-8.5,.3,1.7,3,0x262a2a);
-      addSolid(0,.15,20,.3,4.7,0x24202b);
+      buildEntrance();
       addSolid(0,-32.15,20,.3,4.7,0x273033);
       addSolid(-8.4,-24,3.2,.25,4.7,0x33313f);
       addSolid(3.4,-24,13.2,.25,4.7,0x33313f);
@@ -122,7 +148,7 @@
     function readRoomDistance(){
       const bathroom=Math.max(0,Math.min(1,(-player.z-23.5)/3));
       const smoking=Math.max(0,Math.min(1,(player.x-9.5)/3));
-      return Math.max(bathroom,smoking);
+      return Math.max(bathroom,smoking,THREE.MathUtils.clamp(player.z/7,0,1));
     }
     function buildSmokingRoom(){
       addBox(14.2,-.08,-9,8,.16,8,0x171b22);
@@ -713,7 +739,7 @@
           signal.got=true;pips[index].classList.add('on');pulse=.7;score.resonate();
         }
       }
-      chapter.textContent=`${player.x>10.3?'smoking room':player.z<-24.1?'restroom':player.x<-5.5&&player.z>-13?'bar':'dance floor'} · ${softMode?'gentle lights':'strobe'} · ×${rhythmMultiplier(rhythmCombo)}${drinks?' · '+drinks+' glasses · '+sipsLeft+'/6 sips':''}`;
+      chapter.textContent=`${player.z>0?'entrance':player.x>10.3?'smoking room':player.z<-24.1?'restroom':player.x<-5.5&&player.z>-13?'bar':'dance floor'} · ${softMode?'gentle lights':'strobe'} · ×${rhythmMultiplier(rhythmCombo)}${drinks?' · '+drinks+' glasses · '+sipsLeft+'/6 sips':''}`;
       timer.textContent=`${String(Math.floor(elapsed/60)).padStart(2,'0')}:${String(Math.floor(elapsed%60)).padStart(2,'0')}`;
       updateHints();
     }
@@ -938,12 +964,12 @@
       softMode=soft||matchMedia('(prefers-reduced-motion: reduce)').matches;
       bathroomAction=null;bathroomWait=null;bathroomDone=null;bathroomSpots.forEach(spot=>spot.particles.visible=false);
       playing=true;rhythmEnergy=0;rhythmCombo=0;lastRhythmBeat=-Infinity;lastRhythmTime=-Infinity;seatedAtBar=false;tipsiness=0;elapsed=0;beatCount=0;pulse=0;dancing=false;drinks=0;sipsLeft=6;sipUntil=0;cigarette=0;dragUntil=0;exhaled=true;jumpTime=-1;keys.clear();
-      Object.assign(player,{x:0,z:-2.5,angle:0,pitch:0});
+      Object.assign(player,entranceSpawn);
       heartNext=0;danceHearts.forEach(heart=>{heart.born=-Infinity;heart.mesh.visible=false;});
       guests.forEach(guest=>{guest.shared=false;guest.drinkUntil=0;if(guest.cup)guest.cup.visible=false;});
       signals.forEach(signal=>signal.got=false);pips.forEach(pip=>pip.classList.remove('on'));
       intro.classList.add('hidden');ending.classList.add('hidden');document.querySelector('main').classList.add('active');
-      showMessage('WASD: walk · click: capture mouse · Esc: release · BAR on the left',6);
+      showMessage('Follow the floor stripe left into the club · drag to look',6);
       if(!window.clubAudioFrame?.active)score.start();
       requestLook();
     }
@@ -1012,7 +1038,7 @@
         renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false,powerPreference:'high-performance'});
         renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;
         scene=new THREE.Scene();scene.background=new THREE.Color(0x08080e);scene.fog=new THREE.FogExp2(0x11101b,.026);
-        camera=new THREE.PerspectiveCamera(72,1,.045,65);camera.position.set(0,1.64,-2.5);
+        camera=new THREE.PerspectiveCamera(72,1,.045,65);camera.position.set(entranceSpawn.x,1.64,entranceSpawn.z);
         buildRoom();buildGuests();
         scene.traverse(object=>{if(object.isMesh)for(const material of [].concat(object.material))projectMaterial(material);});
         colorPass=createColorPass();
