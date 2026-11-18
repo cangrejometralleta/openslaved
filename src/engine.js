@@ -197,18 +197,17 @@
     const bathroomDelay=1.2;
     function addBathroomSpot(kind,x,z){
       const particles=new THREE.Group();
-      const shape=kind==='water'?new THREE.SphereGeometry(.035,6,4):new THREE.SphereGeometry(.022,8,6);
+      const shape=kind==='water'?new THREE.SphereGeometry(.035,6,4):new THREE.BoxGeometry(.042,.042,.042);
       const material=new THREE.MeshBasicMaterial({
-        color:kind==='water'?0x80edff:0xe4faff,toneMapped:false
+        color:kind==='water'?0x80edff:0xe9ff44,toneMapped:false
       });
       const glow=new THREE.MeshBasicMaterial({
-        color:0x72cfff,transparent:true,opacity:.16,depthWrite:false,
-        blending:THREE.AdditiveBlending,toneMapped:false
+        color:0x3127cc,side:THREE.BackSide,toneMapped:false
       });
       for(let index=0;index<(kind==='water'?14:24);index++){
         const drop=new THREE.Mesh(shape,material);
         if(kind==='toilet'){
-          const halo=new THREE.Mesh(shape,glow);halo.scale.setScalar(1.9);drop.add(halo);
+          const halo=new THREE.Mesh(new THREE.IcosahedronGeometry(.062,1),glow);drop.add(halo);
         }
         particles.add(drop);
       }
@@ -216,25 +215,38 @@
       const spot={kind,x,z,particles};bathroomSpots.push(spot);return spot;
     }
     function buildBathroom(){
-      const bathFloor=new THREE.Mesh(new THREE.PlaneGeometry(20,7.9),new THREE.MeshStandardMaterial({color:0xabb6ad,roughness:.8}));
+      const bathFloor=new THREE.Mesh(new THREE.PlaneGeometry(20,7.9),new THREE.MeshStandardMaterial({color:0x334333,roughness:.8}));
       bathFloor.rotation.x=-Math.PI/2;bathFloor.position.set(0,.006,-28.05);scene.add(bathFloor);
       addStrip(0,4.3,-28,12,.13,0xb4ffe9);
       addSign('BREATHE',-5,2.7,-31.97,0x8cffe1,3);
       // Open stalls, shallow sinks and a metal mirror leave a continuous aisle.
-      for(const x of [-1,2,5])addSolid(x,-30.1,.12,3.8,2.2,0x63746d);
+      for(const x of [-1,2,5]){
+        addSolid(x,-30.1,.12,3.8,2.2,0x323b32);
+        addStrip(x,2.21,-30.1,.15,3.8,0xa1ffbb);
+        addBox(x,1.1,-28.18,.14,2.2,.04,0xe449ab,.35);
+      }
       for(const x of [.5,3.5]){
-        addSolid(x,-31,.62,.82,.32,0xdee8d8);
-        const bowl=new THREE.Mesh(new THREE.CylinderGeometry(.25,.15,.2,24,1,true),
-          new THREE.MeshStandardMaterial({color:0xdee8d8,roughness:.3,side:THREE.DoubleSide}));
-        bowl.position.set(x,.42,-30.9);scene.add(bowl);
-        const water=new THREE.Mesh(new THREE.CircleGeometry(.205,32),
-          new THREE.MeshStandardMaterial({color:0x69cbd8,roughness:.16,metalness:.25,
-            emissive:0x16454c,emissiveIntensity:.3,side:THREE.DoubleSide}));
-        water.rotation.x=-Math.PI/2;water.position.set(x,.43,-30.9);scene.add(water);
-        addBox(x,.78,-31.65,.65,.9,.25,0xdde4d6);
-        const seat=new THREE.Mesh(new THREE.TorusGeometry(.24,.055,6,16),getMaterial(0xf1fff6));
-        seat.rotation.x=Math.PI/2;seat.position.set(x,.55,-30.9);scene.add(seat);
+        // A dark recessed trough with a broad, luminous rectangular lip.
+        const width=1.72, depth=.66, centerZ=-30.9;
+        addSolid(x,centerZ,width,depth,.36,0x24283a);
+        addBox(x,.69,-31.21,width,.66,.09,0x30352d);
+        addBox(x,1.02,-31.21,width,.045,.10,0xa9ffe1,.7);
+        addBox(x,.49,-30.59,width,.20,.08,0x32343b);
+        addBox(x,.60,-30.59,width,.035,.085,0xf2f2ba,.65);
+        for(const side of [-1,1]){
+          const edge=x+side*(width-.08)/2;
+          addBox(edge,.49,centerZ,.08,.22,depth,0x353c38);
+          addBox(edge,.61,centerZ,.08,.035,depth,0xd148ab,.65);
+        }
+        const water=new THREE.Mesh(new THREE.PlaneGeometry(width-.17,depth-.14),
+          new THREE.MeshStandardMaterial({color:0x3f8290,roughness:.2,metalness:.22,
+            emissive:0x18303a,side:THREE.DoubleSide}));
+        water.rotation.x=-Math.PI/2;water.position.set(x,.43,centerZ);scene.add(water);
         const spot=addBathroomSpot('toilet',x,-30.05);spot.water=water;
+        const ripple=new THREE.Mesh(new THREE.RingGeometry(.8,1,20),
+          new THREE.MeshBasicMaterial({color:0xbaff9e,transparent:true,depthWrite:false}));
+        ripple.rotation.x=-Math.PI/2;ripple.position.copy(water.position);ripple.position.y+=.003;
+        ripple.visible=false;scene.add(ripple);spot.ripple=ripple;
       }
       addSolid(8.8,-28,1.35,4.9,.85,0x93b3a4);
       for(const z of [-26.5,-28,-29.5]){
@@ -597,21 +609,23 @@
         recoveryDuration[spot.kind]);
     }
     function updateToiletDrop(drop,index,time){
-      const flight=.65,spacing=.035,cycle=24*spacing;
-      const offset=index*spacing;
+      const flight=.65,spacing=.038,cycle=1.02;
+      const offset=Math.floor(index/6)*.25+(index%6)*spacing;
       const born=Math.floor((time-offset)/cycle)*cycle+offset;
       const age=(time-born)/flight;
       drop.visible=born>=0&&born<=recoveryDuration.toilet-flight&&age>=0&&age<=1;
       if(!drop.visible)return;
       const {origin,spot}=bathroomAction,target=spot.water.position;
       const spread=.025;
+      const arc=4*age*(1-age);
+      const sweep=Math.sin(born*5.4)*.17;
       drop.position.set(
-        THREE.MathUtils.lerp(origin.x,target.x+Math.sin(index*2.4)*spread,age),
-        THREE.MathUtils.lerp(origin.y,target.y,age)+Math.sin(age*Math.PI)*.14,
+        THREE.MathUtils.lerp(origin.x,target.x+Math.sin(index*2.4)*spread,age)+arc*sweep,
+        THREE.MathUtils.lerp(origin.y,target.y,age)+arc*(.17+.06*Math.cos(born*3)),
         THREE.MathUtils.lerp(origin.z,target.z+Math.cos(index*2.4)*spread,age)
       );
       const size=.55+.45*Math.min(1,born/.8);
-      drop.scale.set(size,size*1.8,size);
+      drop.scale.setScalar(size);
     }
     function updateBathroom(){
       const nearby=nearestBathroom();
@@ -624,7 +638,15 @@
       if(!bathroomAction)return;
       const {spot,started}=bathroomAction,progress=(elapsed-started)/recoveryDuration[spot.kind];
       if(Math.hypot(player.x-spot.x,player.z-spot.z)>=.95){
+        if(spot.ripple)spot.ripple.visible=false;
         spot.particles.visible=false;bathroomAction=null;showMessage('Action cancelled.');return;
+      }
+      if(spot.ripple){
+        const impactTime=elapsed-started-.65;
+        const phase=(impactTime%.42)/.42;
+        spot.ripple.visible=impactTime>=0&&progress<1;
+        spot.ripple.scale.setScalar(.025+.15*Math.max(0,phase));
+        spot.ripple.material.opacity=.65*(1-Math.max(0,phase));
       }
       spot.particles.visible=true;
       spot.particles.children.forEach((drop,index)=>{
@@ -962,7 +984,7 @@
     }
     function start(soft=true){
       softMode=soft||matchMedia('(prefers-reduced-motion: reduce)').matches;
-      bathroomAction=null;bathroomWait=null;bathroomDone=null;bathroomSpots.forEach(spot=>spot.particles.visible=false);
+      bathroomAction=null;bathroomWait=null;bathroomDone=null;bathroomSpots.forEach(spot=>{spot.particles.visible=false;if(spot.ripple)spot.ripple.visible=false;});
       playing=true;rhythmEnergy=0;rhythmCombo=0;lastRhythmBeat=-Infinity;lastRhythmTime=-Infinity;seatedAtBar=false;tipsiness=0;elapsed=0;beatCount=0;pulse=0;dancing=false;drinks=0;sipsLeft=6;sipUntil=0;cigarette=0;dragUntil=0;exhaled=true;jumpTime=-1;keys.clear();
       Object.assign(player,entranceSpawn);
       heartNext=0;danceHearts.forEach(heart=>{heart.born=-Infinity;heart.mesh.visible=false;});
