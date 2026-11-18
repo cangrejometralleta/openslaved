@@ -700,11 +700,14 @@
       hint.textContent='Space: dance / tap beat · WASD: walk · Shift: run · M: music source · Q: drink · mouse / drag: look · J/R: turn · E / click: interact · Space: dance / tap beat · L: lights';
     }
     function updatePlayer(dt){
-      const forward=Number(keys.has('w')||keys.has('arrowup'))-Number(keys.has('s')||keys.has('arrowdown'));
-      const side=Number(keys.has('d')||keys.has('arrowright'))-Number(keys.has('a')||keys.has('arrowleft'));
+      let forward=Number(keys.has('w')||keys.has('arrowup'))-Number(keys.has('s')||keys.has('arrowdown'));
+      let side=Number(keys.has('d')||keys.has('arrowright'))-Number(keys.has('a')||keys.has('arrowleft'));
+      // The joystick adds an analog push: its distance from the centre scales the pace.
+      const push=stickPush(),keyed=Boolean(forward||side);
+      if(push>0){forward-=stick.y;side+=stick.x;}
       player.angle+=(Number(keys.has('r'))-Number(keys.has('j')))*dt*1.6;
       const movement=readMovement(forward,side,player.angle);moving=Boolean(forward||side);
-      const speed=keys.has('shift')?5.6:3.1;
+      const speed=(keys.has('shift')?5.6:3.1)*(keyed||!push?1:.35+.65*push);
       if(moving&&seatedAtBar)leaveSeat();
       if(moving){movePlayer(movement.x*dt*speed,movement.z*dt*speed);dancing=false;}
       const dancePhase=window.clubAudioFrame?.active?window.clubAudioFrame.phase:elapsed*13.82;
@@ -989,6 +992,62 @@
       }
       requestAnimationFrame(drawFrame);
     }
+    // Touch controls: an analog stick for walking and an optional gyroscope for looking.
+    const stick={x:0,y:0,id:null};
+    const gyro={on:false,calibrate:false,yawOffset:0,pitchOffset:0};
+    const gyroEuler=new THREE.Euler(),gyroQuat=new THREE.Quaternion(),gyroTurn=new THREE.Quaternion();
+    const gyroFlip=new THREE.Quaternion(-Math.sqrt(.5),0,0,Math.sqrt(.5)),gyroAxis=new THREE.Vector3(0,0,1),gyroForward=new THREE.Vector3();
+    function stickPush(){
+      const length=Math.hypot(stick.x,stick.y);
+      return length<.15?0:Math.min(1,(length-.15)/.85);
+    }
+    function turnView(yaw,pitch){
+      player.angle+=yaw;player.pitch=Math.max(-1.2,Math.min(1.2,player.pitch+pitch));
+      if(gyro.on){gyro.yawOffset+=yaw;gyro.pitchOffset=Math.max(-2.4,Math.min(2.4,gyro.pitchOffset+pitch));}
+    }
+    function readGyro(event){
+      if(!gyro.on||!playing||event.beta==null||event.alpha==null)return;
+      const rad=THREE.MathUtils.degToRad,tilt=window.screen?.orientation?.angle??window.orientation??0;
+      gyroEuler.set(rad(event.beta),rad(event.alpha),-rad(event.gamma||0),'YXZ');
+      gyroQuat.setFromEuler(gyroEuler).multiply(gyroFlip).multiply(gyroTurn.setFromAxisAngle(gyroAxis,-rad(tilt)));
+      gyroForward.set(0,0,-1).applyQuaternion(gyroQuat);
+      const yaw=Math.atan2(gyroForward.x,-gyroForward.z),pitch=Math.asin(Math.max(-1,Math.min(1,gyroForward.y)));
+      if(gyro.calibrate){gyro.yawOffset=player.angle-yaw;gyro.pitchOffset=player.pitch-pitch;gyro.calibrate=false;}
+      player.angle=yaw+gyro.yawOffset;player.pitch=Math.max(-1.2,Math.min(1.2,pitch+gyro.pitchOffset));
+    }
+    async function toggleGyro(button){
+      if(gyro.on){
+        gyro.on=false;button.classList.remove('on');button.setAttribute('aria-pressed','false');
+        removeEventListener('deviceorientation',readGyro);showMessage('Gyro off · drag to look');return;
+      }
+      try{
+        const request=window.DeviceOrientationEvent&&DeviceOrientationEvent.requestPermission;
+        if(typeof request==='function'&&await request.call(DeviceOrientationEvent)!=='granted'){showMessage('Motion access was denied');return;}
+      }catch(error){showMessage('Motion access is unavailable');return;}
+      gyro.on=true;gyro.calibrate=true;button.classList.add('on');button.setAttribute('aria-pressed','true');
+      addEventListener('deviceorientation',readGyro);showMessage('Gyro on · tilt to look · drag to fine-tune',4);
+      setTimeout(()=>{if(gyro.on&&gyro.calibrate){toggleGyro(button);showMessage('No motion sensor found · drag to look');}},1800);
+    }
+    function bindTouch(){
+      const pad=document.getElementById('stick'),knob=document.getElementById('stick-knob');
+      const reset=()=>{stick.id=null;stick.x=stick.y=0;knob.style.transform='';};
+      const aim=event=>{
+        const box=pad.getBoundingClientRect(),radius=box.width/2,reach=radius-27;
+        let dx=event.clientX-(box.left+radius),dy=event.clientY-(box.top+radius);
+        const length=Math.hypot(dx,dy),scale=length>reach?reach/length:1;dx*=scale;dy*=scale;
+        stick.x=dx/reach;stick.y=dy/reach;knob.style.transform=`translate(${dx}px,${dy}px)`;
+      };
+      pad.addEventListener('pointerdown',event=>{
+        event.preventDefault();if(!playing||stick.id!==null)return;
+        stick.id=event.pointerId;try{pad.setPointerCapture(event.pointerId);}catch(error){}aim(event);
+      });
+      pad.addEventListener('pointermove',event=>{if(event.pointerId===stick.id)aim(event);});
+      for(const name of ['pointerup','pointercancel','lostpointercapture'])pad.addEventListener(name,event=>{if(event.pointerId===stick.id)reset();});
+      for(const name of ['blur','pagehide'])addEventListener(name,reset);
+      const button=document.getElementById('action-gyro');
+      if(window.DeviceOrientationEvent&&matchMedia('(any-pointer:coarse)').matches)button.hidden=false;
+      button.addEventListener('click',()=>{if(playing)toggleGyro(button);});
+    }
     function requestLook(){
       canvas.focus();
       if(!canvas.requestPointerLock)return;
@@ -1000,7 +1059,7 @@
     function start(soft=true){
       softMode=soft||matchMedia('(prefers-reduced-motion: reduce)').matches;
       bathroomAction=null;bathroomWait=null;bathroomDone=null;bathroomSpots.forEach(spot=>{spot.particles.visible=false;if(spot.ripple)spot.ripple.visible=false;});
-      playing=true;rhythmEnergy=0;rhythmCombo=0;lastRhythmBeat=-Infinity;lastRhythmTime=-Infinity;seatedAtBar=false;tipsiness=0;elapsed=0;beatCount=0;pulse=0;dancing=false;drinks=0;sipsLeft=6;sipUntil=0;cigarette=0;dragUntil=0;exhaled=true;jumpTime=-1;keys.clear();
+      playing=true;rhythmEnergy=0;rhythmCombo=0;lastRhythmBeat=-Infinity;lastRhythmTime=-Infinity;seatedAtBar=false;tipsiness=0;elapsed=0;beatCount=0;pulse=0;dancing=false;drinks=0;sipsLeft=6;sipUntil=0;cigarette=0;dragUntil=0;exhaled=true;jumpTime=-1;keys.clear();stick.id=null;stick.x=stick.y=0;gyro.calibrate=gyro.on;
       Object.assign(player,entranceSpawn);
       heartNext=0;danceHearts.forEach(heart=>{heart.born=-Infinity;heart.mesh.visible=false;});
       guests.forEach(guest=>{guest.shared=false;guest.drinkUntil=0;if(guest.cup)guest.cup.visible=false;});
@@ -1047,8 +1106,7 @@
       });
       canvas.addEventListener('pointermove',event=>{
         if(!playing||document.pointerLockElement===canvas||!dragging)return;
-        player.angle+=(event.clientX-lastX)*.003;
-        player.pitch=Math.max(-1.2,Math.min(1.2,player.pitch-(event.clientY-lastY)*.003));
+        turnView((event.clientX-lastX)*.003,-(event.clientY-lastY)*.003);
         lastX=event.clientX;lastY=event.clientY;
       });
       for(const event of ['pointerup','pointercancel','lostpointercapture'])canvas.addEventListener(event,()=>dragging=false);
@@ -1058,7 +1116,7 @@
         player.pitch=Math.max(-1.2,Math.min(1.2,player.pitch-event.movementY*.0024));
       });
       document.addEventListener('pointerlockchange',()=>{keys.clear();dragging=false;});
-      for(const [id,key] of [['move-forward','w'],['move-back','s'],['move-left','a'],['move-right','d'],['move-run','shift']]){
+      for(const [id,key] of [['move-run','shift']]){
         const button=document.getElementById(id);
         button.addEventListener('pointerdown',event=>{event.preventDefault();if(!playing)return;button.setPointerCapture(event.pointerId);keys.add(key);});
         for(const event of ['pointerup','pointercancel','lostpointercapture'])button.addEventListener(event,()=>keys.delete(key));
@@ -1079,7 +1137,7 @@
         buildRoom();buildGuests();
         scene.traverse(object=>{if(object.isMesh)for(const material of [].concat(object.material))projectMaterial(material);});
         colorPass=createColorPass();
-        bindControls();resizeScene();requestAnimationFrame(drawFrame);
+        bindControls();bindTouch();resizeScene();requestAnimationFrame(drawFrame);
       }catch(error){
         console.error(error);chapter.textContent='WebGL unavailable';
         document.querySelector('.lede').textContent='Could not start the 3D scene. Open in a browser with WebGL and hardware acceleration enabled.';

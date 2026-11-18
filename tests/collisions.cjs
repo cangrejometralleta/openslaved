@@ -19,7 +19,8 @@ const instrumented=source.replace('    bootScene();',`    globalThis.game={playe
       createWorld(){scene=new THREE.Scene();camera=new THREE.PerspectiveCamera();buildRoom();buildGuests();return scene;},
       animate(time){guests.forEach(guest=>animateGuest(guest,time));},
       updateHearts,get danceHearts(){return danceHearts;},setDancing(value){dancing=value;},interact,drinkCup,updateBathroom,updateCigarette,readRoomDistance,get cigarette(){return cigarette;},get smoker(){return smoker;}, get tipsiness(){return tipsiness;},get bathroomAction(){return bathroomAction;}, get drinks(){return drinks;},get dancing(){return dancing;},
-      advance(seconds){elapsed+=seconds;return elapsed;}};`);
+      advance(seconds){elapsed+=seconds;return elapsed;},
+      stick,gyro,stickPush,readGyro,turnView,setPlaying(value){playing=value;}};`);
 vm.runInContext(instrumented,sandbox);
 const game=sandbox.game;
 const scene=game.createWorld();
@@ -39,6 +40,21 @@ check('the entrance leads from the vestibule through the passage onto the floor'
   game.movePlayer(-game.player.x,0);game.movePlayer(0,-9);
   assert.ok(game.player.z<0);clearOfWalls();
   game.movePlayer(0,15);near(game.player.z,8.11);clearOfWalls();
+});
+check('the joystick ignores its dead zone and scales its push',()=>{
+  Object.assign(game.stick,{x:.1,y:0});near(game.stickPush(),0);
+  Object.assign(game.stick,{x:.575,y:0});near(game.stickPush(),.5);
+  Object.assign(game.stick,{x:0,y:-1});near(game.stickPush(),1);
+  Object.assign(game.stick,{x:0,y:0});
+});
+check('the gyroscope turns and tilts the view from where it was switched on',()=>{
+  game.setPlaying(true);Object.assign(game.player,{angle:1,pitch:0});
+  Object.assign(game.gyro,{on:true,calibrate:true,yawOffset:0,pitchOffset:0});
+  game.readGyro({alpha:40,beta:90,gamma:0});near(game.player.angle,1,1e-6);near(game.player.pitch,0,1e-6);
+  game.readGyro({alpha:130,beta:90,gamma:0});near(game.player.angle,1-Math.PI/2,1e-6);
+  game.readGyro({alpha:40,beta:120,gamma:0});near(game.player.pitch,Math.PI/6,1e-6);
+  game.turnView(.25,0);game.readGyro({alpha:40,beta:120,gamma:0});near(game.player.angle,1.25,1e-6);
+  game.gyro.on=false;game.setPlaying(false);
 });
 check('walking diagonally slides along the exterior wall',()=>{
   position(9,-3);game.movePlayer(4,-4);near(game.player.x,9.71);near(game.player.z,-7);clearOfWalls();

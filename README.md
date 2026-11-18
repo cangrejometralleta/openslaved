@@ -30,6 +30,8 @@ The game includes synthesized music and an optional browser-tab audio source. Us
 | X | Sit at the bar or stand up |
 | M | Select or stop a shared music source |
 | L | Toggle gentle lighting |
+| Touch joystick | Move; push further to walk faster |
+| Touch drag / Gyro look | Look around; Gyro look tilts the view with your phone and drag fine-tunes it |
 
 ## Run locally
 

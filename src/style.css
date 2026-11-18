@@ -69,19 +69,20 @@
         display:grid;position:absolute;bottom:max(12px,env(safe-area-inset-bottom));gap:4px;
         user-select:none;-webkit-user-select:none;
       }
-      main.active .move-controls {left:8px;right:auto;grid-template-columns:repeat(3,44px);}
+      main.active .move-controls {left:12px;right:auto;grid-template-columns:132px;gap:8px;}
       main.active .action-controls {right:8px;grid-template-columns:repeat(2,68px);}
       .move-controls button, .action-controls button {
         min-height:44px;padding:4px;background:#101014e8;color:var(--acid);
         border:1px solid #799d35;border-radius:8px;touch-action:none;font-size:11px;
       }
       .move-controls button:active,.action-controls button:active {background:#41551f;}
-      #move-forward {grid-column:2;grid-row:1;}
-      #move-left {grid-column:1;grid-row:2;} #move-back {grid-column:2;grid-row:2;}
-      #move-right {grid-column:3;grid-row:2;}
-      #move-run {grid-column:1 / -1;grid-row:3;}
+      .stick {position:relative;width:132px;height:132px;border-radius:50%;touch-action:none;user-select:none;-webkit-user-select:none;
+        background:radial-gradient(circle,#1c2610cc 0 38%,#101014d8 39%);border:1px solid #799d35;}
+      .stick i {position:absolute;left:50%;top:50%;width:54px;height:54px;margin:-27px 0 0 -27px;border-radius:50%;pointer-events:none;
+        background:#b7ff36cc;border:1px solid #e2ffd6;box-shadow:0 0 14px #b7ff3688;}
+      #action-gyro {grid-column:1 / -1;} #action-gyro.on {background:#41551f;color:#e2ffd6;}
       .hint {top:62px;bottom:auto;left:8px;right:8px;max-width:none;font-size:9px;}
-      main #beat-guide {bottom:162px;white-space:nowrap;}
+      main #beat-guide {bottom:236px;white-space:nowrap;}
       .keys {display:none;}
     }
 
