@@ -11,7 +11,7 @@
     const colors=[0xffbc52,0xdf8644,0x7199ee,0xe5d6ac,0x9cafa3];
     let playing=false, elapsed=0, pulse=0, softMode=true, dancing=false, drinks=0, jumpTime=-1, seatedAtBar=false, tipsiness=0, sipsLeft=6;
     let last=0, scene, camera, renderer, floor, messageUntil=0, moving=false;
-    let clockTime=0, crouch=0, beatCount=0, rhythmEnergy=0, rhythmCombo=0, lastRhythmBeat=-Infinity, lastRhythmTime=-Infinity;
+    let clockTime=0, beatCount=0, rhythmEnergy=0, rhythmCombo=0, lastRhythmBeat=-Infinity, lastRhythmTime=-Infinity;
     const score=createScore({player,signals,isPlaying:()=>playing});
     const materialCache=new Map();
     const unitBox=new THREE.BoxGeometry(1,1,1);
@@ -649,16 +649,14 @@
       if(dancing){hint.textContent='Dancing · B to stop · Space on the beat · WASD to walk';return;}
       if(player.x<-5.5&&player.z<-3.5&&player.z>-12.5){hint.textContent='BAR · E: get drinks · Q: sip';return;}
       if(nearestGuest()){hint.textContent=drinks?'E: share a drink · Space: dance / tap beat':'E: dance together · Space: dance / tap beat';return;}
-      hint.textContent='C: crouch · Space: dance / tap beat · WASD: walk · Shift: run · M: music source · Q: drink · mouse / drag: look · J/R: turn · E / click: interact · Space: dance / tap beat · L: lights';
+      hint.textContent='Space: dance / tap beat · WASD: walk · Shift: run · M: music source · Q: drink · mouse / drag: look · J/R: turn · E / click: interact · Space: dance / tap beat · L: lights';
     }
     function updatePlayer(dt){
       const forward=Number(keys.has('w')||keys.has('arrowup'))-Number(keys.has('s')||keys.has('arrowdown'));
       const side=Number(keys.has('d')||keys.has('arrowright'))-Number(keys.has('a')||keys.has('arrowleft'));
       player.angle+=(Number(keys.has('r'))-Number(keys.has('j')))*dt*1.6;
       const movement=readMovement(forward,side,player.angle);moving=Boolean(forward||side);
-      const crouching=keys.has('c');
-      crouch+=((crouching?1:0)-crouch)*(1-Math.exp(-dt*14));
-      const speed=crouching?1.35:keys.has('shift')?5.6:3.1;
+      const speed=keys.has('shift')?5.6:3.1;
       if(moving&&seatedAtBar)leaveSeat();
       if(moving){movePlayer(movement.x*dt*speed,movement.z*dt*speed);dancing=false;}
       const dancePhase=window.clubAudioFrame?.active?window.clubAudioFrame.phase:elapsed*13.82;
@@ -668,7 +666,7 @@
       const sway=moving?Math.sin(elapsed*6.5)*.035:dancing?Math.sin(dancePhase*.5)*.06:0;
       tipsiness=Math.max(0,tipsiness-dt*.012);
       const dizzy=softMode?0:tipsiness;
-      camera.position.set(player.x,(seatedAtBar?1.45:1.64)-crouch*.7+jump+bob,player.z);
+      camera.position.set(player.x,(seatedAtBar?1.45:1.64)+jump+bob,player.z);
       canvas.style.filter=tipsiness>0.01?`blur(${(tipsiness*(softMode?.65:4.2)).toFixed(2)}px)`:'';
       camera.rotation.set(player.pitch+(bathroomAction?.spot.kind==='toilet'?-.25:0)+Math.sin(elapsed*.85)*dizzy*.065,-player.angle+Math.sin(elapsed*.6)*dizzy*.055,sway+Math.sin(elapsed*1.2)*dizzy*.105,'YXZ');
     }
@@ -939,7 +937,7 @@
     function start(soft=true){
       softMode=soft||matchMedia('(prefers-reduced-motion: reduce)').matches;
       bathroomAction=null;bathroomWait=null;bathroomDone=null;bathroomSpots.forEach(spot=>spot.particles.visible=false);
-      playing=true;rhythmEnergy=0;rhythmCombo=0;lastRhythmBeat=-Infinity;lastRhythmTime=-Infinity;seatedAtBar=false;tipsiness=0;elapsed=0;beatCount=0;pulse=0;dancing=false;drinks=0;sipsLeft=6;sipUntil=0;cigarette=0;dragUntil=0;exhaled=true;jumpTime=-1;crouch=0;keys.clear();
+      playing=true;rhythmEnergy=0;rhythmCombo=0;lastRhythmBeat=-Infinity;lastRhythmTime=-Infinity;seatedAtBar=false;tipsiness=0;elapsed=0;beatCount=0;pulse=0;dancing=false;drinks=0;sipsLeft=6;sipUntil=0;cigarette=0;dragUntil=0;exhaled=true;jumpTime=-1;keys.clear();
       Object.assign(player,{x:0,z:-2.5,angle:0,pitch:0});
       heartNext=0;danceHearts.forEach(heart=>{heart.born=-Infinity;heart.mesh.visible=false;});
       guests.forEach(guest=>{guest.shared=false;guest.drinkUntil=0;if(guest.cup)guest.cup.visible=false;});
@@ -997,7 +995,7 @@
         player.pitch=Math.max(-1.2,Math.min(1.2,player.pitch-event.movementY*.0024));
       });
       document.addEventListener('pointerlockchange',()=>{keys.clear();dragging=false;});
-      for(const [id,key] of [['move-forward','w'],['move-back','s'],['move-left','a'],['move-right','d'],['move-crouch','c'],['move-run','shift']]){
+      for(const [id,key] of [['move-forward','w'],['move-back','s'],['move-left','a'],['move-right','d'],['move-run','shift']]){
         const button=document.getElementById(id);
         button.addEventListener('pointerdown',event=>{event.preventDefault();if(!playing)return;button.setPointerCapture(event.pointerId);keys.add(key);});
         for(const event of ['pointerup','pointercancel','lostpointercapture'])button.addEventListener(event,()=>keys.delete(key));

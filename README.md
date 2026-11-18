@@ -23,7 +23,6 @@ The game includes synthesized music and an optional browser-tab audio source. Us
 | Mouse / drag | Look around |
 | J / R | Turn |
 | Esc | Release the mouse |
-| C (hold) | Crouch |
 | Space | Tap the rhythm |
 | B | Toggle dancing |
 | E / click | Interact (in the smoking room: share a smoke, take a drag) |

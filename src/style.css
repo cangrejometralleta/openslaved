@@ -79,7 +79,7 @@
       #move-forward {grid-column:2;grid-row:1;}
       #move-left {grid-column:1;grid-row:2;} #move-back {grid-column:2;grid-row:2;}
       #move-right {grid-column:3;grid-row:2;}
-      #move-crouch {grid-column:1 / 3;grid-row:3;} #move-run {grid-column:3;grid-row:3;}
+      #move-run {grid-column:1 / -1;grid-row:3;}
       .hint {top:62px;bottom:auto;left:8px;right:8px;max-width:none;font-size:9px;}
       main #beat-guide {bottom:162px;white-space:nowrap;}
       .keys {display:none;}
