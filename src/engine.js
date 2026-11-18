@@ -738,16 +738,17 @@
             varying vec2 floorUv;uniform float phase;uniform float energy;uniform float gentle;
             void main(){
               vec2 p=(floorUv-.5)*vec2(20.,24.);
-              vec2 grid=abs(fract(p*.5)-.5);
-              float seams=1.-smoothstep(.012,.04,min(grid.x,grid.y));
-              float distanceFromBooth=length(p-vec2(2.,8.));
-              float ringPhase=fract(distanceFromBooth*.18-phase*.16);
-              float rings=(1.-smoothstep(.035,.11,abs(ringPhase-.5)))*(1.-gentle);
-              float diagonal=pow(.5+.5*sin(p.x*.9+p.y*.7-phase*.7),12.)*(1.-gentle);
-              vec3 cyan=vec3(.95,.61,.16),pink=vec3(.19,.32,.72);
-              vec3 color=mix(cyan,pink,.5+.5*sin(distanceFromBooth*.5-phase*.2));
+              p.x+=sin(p.y*.55+phase*.18)*.65*(1.-gentle);
+              vec2 grid=abs(fract(p*.48+vec2(0.,phase*.035))-.5);
+              float seams=1.-smoothstep(.025,.065,min(grid.x,grid.y));
+              float zigzag=abs(fract(p.x*.16+phase*.025)-.5)*4.;
+              float bands=step(.56,fract(p.y*.23+zigzag-phase*.08));
+              float hue=floor(p.y*.4+phase*.125);
+              vec3 neon=.5+.5*cos(vec3(0.,2.094,4.188)+hue*1.7);
+              neon=step(vec3(.35),neon);
+              vec3 color=mix(neon,vec3(.92,1.,.73),bands*.85);
               float edge=smoothstep(0.,.04,floorUv.x)*smoothstep(0.,.04,1.-floorUv.x)*smoothstep(0.,.04,floorUv.y)*smoothstep(0.,.04,1.-floorUv.y);
-              float strength=seams*.18+rings*(.18+energy*.35)+diagonal*.12;
+              float strength=seams*(.65+energy*.2)+bands*.24*(1.-gentle);
               gl_FragColor=vec4(color,edge*strength*mix(1.,.28,gentle));
             }`,
         });
@@ -763,7 +764,7 @@
       if(!wallTexture){
         const surface=document.createElement('canvas');surface.width=512;surface.height=256;
         wallBrush=surface.getContext('2d');wallTexture=new THREE.CanvasTexture(surface);wallTexture.colorSpace=THREE.SRGBColorSpace;
-        const material=new THREE.MeshBasicMaterial({map:wallTexture,transparent:true,opacity:.68,depthWrite:false,side:THREE.DoubleSide,toneMapped:false});
+        const material=new THREE.MeshBasicMaterial({map:wallTexture,transparent:true,opacity:.86,depthWrite:false,side:THREE.DoubleSide,toneMapped:false});
         for(const [x,z,width] of [[-9.96,-16,31.9],[9.96,-3.5,6.9],[9.96,-21,21.9]]){
           const panel=new THREE.Mesh(new THREE.PlaneGeometry(width,4.45),material);
           panel.position.set(x,2.3,z);panel.rotation.y=x<0?Math.PI/2:-Math.PI/2;scene.add(panel);
@@ -771,14 +772,22 @@
         const ceiling=new THREE.Mesh(new THREE.PlaneGeometry(16,20),material);ceiling.rotation.x=Math.PI/2;ceiling.position.set(0,4.49,-12);scene.add(ceiling);
       }
       const frame=Math.floor(clockTime*20);if(frame===wallTick)return;wallTick=frame;
-      const c=wallBrush,t=softMode?0:clockTime*(.45+rhythmEnergy*.7);c.fillStyle='#090b1d';c.fillRect(0,0,512,256);
-      const palette=['#e7ba65','#6289db','#f0e4c4'];
-      for(let echo=2;echo>=0;echo--){
-        c.strokeStyle=palette[echo];c.lineWidth=softMode?1:2+rhythmEnergy*3;c.globalAlpha=softMode?.2:.7;
-        for(let ring=0;ring<14;ring++){
-          const radius=12+ring*25+(t*18)%25;c.beginPath();
-          for(let corner=0;corner<=4;corner++){const angle=corner*Math.PI/2+Math.sin(t*.4)*.3;const x=256+Math.cos(angle)*radius+echo*5,y=128+Math.sin(angle)*radius*.65+Math.sin(t+ring*.3)*12;corner?c.lineTo(x,y):c.moveTo(x,y);}c.stroke();
+      const c=wallBrush,t=softMode?0:beatCount*.12;
+      c.fillStyle='#080c12';c.fillRect(0,0,512,256);
+      const palette=['#baff00','#00ffcc','#ff21d4','#f0ffd6'];
+      c.globalAlpha=softMode?.18:.9;
+      for(let ring=18;ring>=0;ring--){
+        const radius=12+ring*22+(t*22)%22;
+        const offset=Math.sin(t*.6)*42;
+        c.strokeStyle=palette[(ring+Math.floor(t/4))%palette.length];
+        c.lineWidth=softMode?2:8+rhythmEnergy*3;c.beginPath();
+        for(let corner=0;corner<=4;corner++){
+          const angle=corner*Math.PI/2+Math.PI/4;
+          const x=256+Math.cos(angle)*radius*1.7+offset;
+          const y=128+Math.sin(angle)*radius*.85;
+          corner?c.lineTo(x,y):c.moveTo(x,y);
         }
+        c.closePath();c.stroke();
       }
       c.globalAlpha=1;wallTexture.needsUpdate=true;
     }
