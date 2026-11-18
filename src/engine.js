@@ -950,11 +950,7 @@
       requestLook();
     }
     function readKey(event){return event.code.startsWith('Key')?event.code.slice(3).toLowerCase():event.key.toLowerCase();}
-    function handleKey(event){
-      if(event.target.matches('input,button,textarea,select')||!playing)return;
-      const key=readKey(event);
-      if([' ','arrowup','arrowdown','arrowleft','arrowright'].includes(key))event.preventDefault();
-      if(!event.repeat){
+    function activateControl(key){
         if(key==='l'){softMode=!softMode;showMessage(softMode?'Gentle mode · flashes off':'Strobes active · L to disable');}
         if(key==='m'){keys.clear();window.openClubMusicSource?.();return;}
         if(key==='e')interact();
@@ -962,7 +958,12 @@
         if(key==='x'){if(seatedAtBar)leaveSeat();else if(Math.hypot(player.x+6.7,player.z+8)<1.65){seatedAtBar=true;dancing=false;player.x=-6.7;player.z=-8;player.angle=-Math.PI/2;showMessage('E: order · Q: sip · X: stand up');}}
         if(key===' ')tapRhythm();
         if(key==='b'){dancing=!dancing;score.resonate();showMessage(dancing?'Dancing · walk to stop':'Walking again.');}
-      }
+    }
+    function handleKey(event){
+      if(event.target.matches('input,button,textarea,select')||!playing)return;
+      const key=readKey(event);
+      if([' ','arrowup','arrowdown','arrowleft','arrowright'].includes(key))event.preventDefault();
+      if(!event.repeat)activateControl(key);
       keys.add(key);
     }
     function bindControls(){
@@ -996,10 +997,13 @@
         player.pitch=Math.max(-1.2,Math.min(1.2,player.pitch-event.movementY*.0024));
       });
       document.addEventListener('pointerlockchange',()=>{keys.clear();dragging=false;});
-      for(const [id,key] of [['move-forward','w'],['move-back','s'],['move-left','a'],['move-right','d']]){
+      for(const [id,key] of [['move-forward','w'],['move-back','s'],['move-left','a'],['move-right','d'],['move-crouch','c'],['move-run','shift']]){
         const button=document.getElementById(id);
-        button.addEventListener('pointerdown',event=>{event.preventDefault();button.setPointerCapture(event.pointerId);keys.add(key);});
+        button.addEventListener('pointerdown',event=>{event.preventDefault();if(!playing)return;button.setPointerCapture(event.pointerId);keys.add(key);});
         for(const event of ['pointerup','pointercancel','lostpointercapture'])button.addEventListener(event,()=>keys.delete(key));
+      }
+      for(const [id,key] of [['interact','e'],['drink','q'],['beat',' '],['dance','b'],['seat','x'],['lights','l']]){
+        document.getElementById('action-'+id).addEventListener('click',()=>{if(playing)activateControl(key);});
       }
       for(const event of ['blur','pagehide'])addEventListener(event,()=>{keys.clear();dragging=false;});
       document.addEventListener('visibilitychange',()=>{keys.clear();last=performance.now();});
