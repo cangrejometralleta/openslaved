@@ -303,8 +303,15 @@
       root.rotation.y=stationary?Math.PI/2:index*2.37;root.scale.setScalar(look.height);guests.push(guest);return guest;
     }
     function buildGuests(){
-      const places=[[-4,-7],[-1,-6],[2,-7],[5,-6.5],[7.8,-8],[-4.8,-12],[-1,-11],[1.7,-10],[4,-11.7],[7.8,-12.7],[-5.2,-16],[-.7,-15],[1.6,-16.7],[4.5,-15.2],[8,-17],[-1.2,-19],[1,-19.8],[4,-19.4],[-6,-19.8],[-.3,-8.2],[3.6,-8.7],[7.5,-20]];
-      places.forEach(([x,z],index)=>addGuest(x,z,index));
+      const count=16+Math.floor(Math.random()*17);
+      let added=0;
+      for(let attempt=0;added<count&&attempt<1000;attempt++){
+        const x=-5+Math.random()*13,z=-5-Math.random()*15;
+        const blocked=solids.some(box=>Math.hypot(x-Math.max(box.minX,Math.min(box.maxX,x)),
+          z-Math.max(box.minZ,Math.min(box.maxZ,z)))<.8);
+        if(blocked||guests.some(guest=>Math.hypot(x-guest.x,z-guest.z)<1.65))continue;
+        addGuest(x,z,added++);
+      }
       for(const [index,z] of [-5,-11].entries()){
         const guest=addGuest(-6.7,z,30+index,true,false);guest.seated=true;guest.radius=.34;
         guest.root.rotation.y=-Math.PI/2;guest.body.position.y=.86;
@@ -643,11 +650,44 @@
       canvas.style.filter=tipsiness>0.01?`blur(${(tipsiness*(softMode?.65:4.2)).toFixed(2)}px)`:'';
       camera.rotation.set(player.pitch+(bathroomAction?.spot.kind==='toilet'?-.25:0)+Math.sin(elapsed*.85)*dizzy*.065,-player.angle+Math.sin(elapsed*.6)*dizzy*.055,sway+Math.sin(elapsed*1.2)*dizzy*.105,'YXZ');
     }
+    const danceHearts=[];
+    const heartLifetime=2.2,heartInterval=.65;
+    let heartNext=0;
+    function buildHearts(){
+      const shape=new THREE.Shape();shape.moveTo(0,-.5);
+      shape.bezierCurveTo(-.95,.05,-.5,.85,0,.35);
+      shape.bezierCurveTo(.5,.85,.95,.05,0,-.5);
+      const geometry=new THREE.ShapeGeometry(shape);
+      for(let index=0;index<6;index++){
+        const material=new THREE.MeshBasicMaterial({color:0xff398a,transparent:true,
+          opacity:0,depthWrite:false,side:THREE.DoubleSide,toneMapped:false});
+        const mesh=new THREE.Mesh(geometry,material);mesh.visible=false;scene.add(mesh);
+        danceHearts.push({mesh,born:-Infinity,x:0,z:0});
+      }
+    }
+    function updateHearts(){
+      const near=dancing?nearestGuest():null;
+      if(near&&elapsed>=heartNext){
+        if(!danceHearts.length)buildHearts();
+        const heart=danceHearts.find(heart=>elapsed-heart.born>=heartLifetime);
+        if(heart){heart.born=elapsed;heart.x=near.guest.x;heart.z=near.guest.z;}
+        heartNext=elapsed+heartInterval;
+      }
+      for(const heart of danceHearts){
+        const age=(elapsed-heart.born)/heartLifetime;
+        heart.mesh.visible=age>=0&&age<1;
+        if(!heart.mesh.visible)continue;
+        heart.mesh.position.set(heart.x+Math.sin(age*4)*.15,2.35+age*.9,heart.z);
+        heart.mesh.quaternion.copy(camera.quaternion);
+        heart.mesh.scale.setScalar(.3+Math.sin(age*Math.PI)*.16);
+        heart.mesh.material.opacity=Math.sin(age*Math.PI)*.85;
+      }
+    }
     function updateWorld(dt){
       if(!playing)return;
       if(window.clubAudioFrame?.active)beatCount=window.clubAudioFrame.phase/(Math.PI*2);else beatCount+=dt*132/60;
       if(elapsed-lastRhythmTime>1.2){rhythmEnergy=Math.max(0,rhythmEnergy-dt*.18);rhythmCombo=0;}
-      elapsed+=dt;pulse=Math.max(0,pulse-dt*1.4);updateBathroom();updateCigarette();updatePlayer(dt);window.clubRoomDistance=readRoomDistance();
+      elapsed+=dt;pulse=Math.max(0,pulse-dt*1.4);updatePlayer(dt);updateBathroom();updateHearts();updateCigarette();window.clubRoomDistance=readRoomDistance();
       for(const [index,signal] of signals.entries()){
         if(!signal.got&&Math.hypot(signal.x-player.x,signal.z-player.z)<1.65){
           signal.got=true;pips[index].classList.add('on');pulse=.7;score.resonate();
@@ -879,6 +919,7 @@
       bathroomAction=null;bathroomSpots.forEach(spot=>spot.particles.visible=false);
       playing=true;rhythmEnergy=0;rhythmCombo=0;lastRhythmBeat=-Infinity;lastRhythmTime=-Infinity;seatedAtBar=false;tipsiness=0;elapsed=0;beatCount=0;pulse=0;dancing=false;drinks=0;sipsLeft=6;sipUntil=0;cigarette=0;dragUntil=0;exhaled=true;jumpTime=-1;crouch=0;keys.clear();
       Object.assign(player,{x:0,z:-2.5,angle:0,pitch:0});
+      heartNext=0;danceHearts.forEach(heart=>{heart.born=-Infinity;heart.mesh.visible=false;});
       guests.forEach(guest=>{guest.shared=false;guest.drinkUntil=0;if(guest.cup)guest.cup.visible=false;});
       signals.forEach(signal=>signal.got=false);pips.forEach(pip=>pip.classList.remove('on'));
       intro.classList.add('hidden');ending.classList.add('hidden');document.querySelector('main').classList.add('active');

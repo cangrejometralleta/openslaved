@@ -16,9 +16,9 @@ vm.createContext(sandbox);
 vm.runInContext(fs.readFileSync(path.join(__dirname,'../src/audio.js'),'utf8'),sandbox);
 const source=fs.readFileSync(path.join(__dirname,'../src/engine.js'),'utf8');
 const instrumented=source.replace('    bootScene();',`    globalThis.game={player,solids,guests,movePlayer,readMovement,resolvePosition,findContact,
-      createWorld(){scene=new THREE.Scene();buildRoom();buildGuests();return scene;},
+      createWorld(){scene=new THREE.Scene();camera=new THREE.PerspectiveCamera();buildRoom();buildGuests();return scene;},
       animate(time){guests.forEach(guest=>animateGuest(guest,time));},
-      interact,drinkCup,updateBathroom,updateCigarette,readRoomDistance,get cigarette(){return cigarette;},get smoker(){return smoker;}, get tipsiness(){return tipsiness;},get bathroomAction(){return bathroomAction;}, get drinks(){return drinks;},get dancing(){return dancing;},
+      updateHearts,get danceHearts(){return danceHearts;},setDancing(value){dancing=value;},interact,drinkCup,updateBathroom,updateCigarette,readRoomDistance,get cigarette(){return cigarette;},get smoker(){return smoker;}, get tipsiness(){return tipsiness;},get bathroomAction(){return bathroomAction;}, get drinks(){return drinks;},get dancing(){return dancing;},
       advance(seconds){elapsed+=seconds;return elapsed;}};`);
 vm.runInContext(instrumented,sandbox);
 const game=sandbox.game;
@@ -71,8 +71,9 @@ check('movement follows camera orientation and diagonal speed is normalized',()=
   vector=game.readMovement(1,1,0);near(Math.hypot(vector.x,vector.z),1);
 });
 check('guests have solid personal space and articulated bodies',()=>{
-  const guest=game.guests.find(guest=>!guest.stationary);position(guest.x,guest.z+2);
-  game.movePlayer(0,-2);near(Math.hypot(game.player.x-guest.x,game.player.z-guest.z),.56);
+  const guest=game.guests.filter(guest=>!guest.stationary&&!guest.smoker).sort((a,b)=>b.z-a.z)[0];
+  position(guest.x,guest.z+.65);
+  game.movePlayer(0,-.65);near(Math.hypot(game.player.x-guest.x,game.player.z-guest.z),.56);
   assert.ok(guest.leftArm.elbow.children.length>0);assert.ok(guest.leftLeg.elbow.children.length>0);
   const before=guest.leftArm.elbow.rotation.x;game.animate(1.27);assert.notEqual(guest.leftArm.elbow.rotation.x,before);
 });
@@ -93,7 +94,7 @@ check('sharing a drink triggers a dance without a countdown ending',()=>{
 });
 check('world builds true meshes with finite geometry bounds',()=>{
   let count=0;scene.traverse(node=>{if(node.isMesh){count++;assert.ok(node.geometry?.isBufferGeometry);node.geometry.computeBoundingSphere();assert.ok(Number.isFinite(node.geometry.boundingSphere.radius));}});
-  assert.ok(count>300);assert.equal(game.guests.length,27);
+  assert.ok(count>300);assert.ok(game.guests.length>=21&&game.guests.length<=37);
   console.log(`  ${count} meshes, ${game.solids.length} colliders, ${game.guests.length} articulated figures`);
 });
 console.log(`${passed} checks passed`);
@@ -196,4 +197,22 @@ check('DJ mixes with moving hands while staying behind the booth',()=>{
   assert.notDeepEqual(dj.leftArm.elbow.rotation.toArray(),left);
   assert.notDeepEqual(dj.rightArm.elbow.rotation.toArray(),right);
   assert.deepEqual(dj.root.position.toArray(),position);
+});
+
+check('random guests have room to dance without overlapping furniture',()=>{
+ const dancers=game.guests.filter(g=>!g.stationary&&!g.smoker);
+ assert.ok(dancers.length>=16&&dancers.length<=32);
+ for(const [index,g] of dancers.entries()){
+  for(const other of dancers.slice(index+1))assert.ok(Math.hypot(g.x-other.x,g.z-other.z)>=1.65);
+  for(const box of game.solids)assert.ok(Math.hypot(g.x-Math.max(box.minX,Math.min(box.maxX,g.x)),g.z-Math.max(box.minZ,Math.min(box.maxZ,g.z)))>=.8);
+ }
+});
+check('hearts appear only when dancing near a guest and fade after leaving',()=>{
+ const guest=game.guests.find(g=>!g.stationary&&!g.smoker);
+ position(guest.x,guest.z+.7);game.setDancing(false);game.updateHearts();
+ assert.equal(game.danceHearts.length,0);
+ game.setDancing(true);game.updateHearts();game.advance(.2);game.updateHearts();
+ assert.ok(game.danceHearts.some(h=>h.mesh.visible&&h.mesh.material.opacity>0));
+ game.setDancing(false);position(0,-2.5);game.advance(3);game.updateHearts();
+ assert.ok(game.danceHearts.every(h=>!h.mesh.visible));
 });
