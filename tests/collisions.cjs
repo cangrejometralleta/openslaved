@@ -98,7 +98,7 @@ check('world builds true meshes with finite geometry bounds',()=>{
 });
 console.log(`${passed} checks passed`);
 
-check("seated guests and staff retain fixed poses across beats",()=>{const fixed=game.guests.filter(g=>g.stationary);assert.equal(fixed.filter(g=>g.seated).length,2);const snapshot=()=>JSON.stringify(fixed.map(g=>[g.root.rotation.toArray(),g.body.position.toArray(),g.leftArm.pivot.rotation.toArray(),g.leftLeg.pivot.rotation.toArray()]));const before=snapshot();game.animate(20);game.animate(44);assert.equal(snapshot(),before);});
+check("seated guests and other staff retain fixed poses across beats",()=>{const fixed=game.guests.filter(g=>g.stationary&&g.role!=='dj');assert.equal(fixed.filter(g=>g.seated).length,2);const snapshot=()=>JSON.stringify(fixed.map(g=>[g.root.rotation.toArray(),g.body.position.toArray(),g.leftArm.pivot.rotation.toArray(),g.leftLeg.pivot.rotation.toArray()]));const before=snapshot();game.animate(20);game.animate(44);assert.equal(snapshot(),before);});
 
 check('seated guests and staff never display wireframe echoes',()=>{
   const fixed=game.guests.filter(guest=>guest.stationary);
@@ -185,4 +185,15 @@ check('the smoker shares a cigarette that lasts six drags and is stubbed out at 
   const resting=smoker.rightArm.pivot.rotation.x;game.animate(6);game.animate(7);
   assert.ok(smoker.rightArm.pivot.rotation.x<resting-1,'the smoker lifts the cigarette');
   position(9,-8.5);game.updateCigarette();assert.equal(game.cigarette,0);
+});
+
+check('DJ mixes with moving hands while staying behind the booth',()=>{
+  const dj=game.guests.find(g=>g.role==='dj');
+  const position=dj.root.position.toArray();
+  game.animate(0);
+  const left=dj.leftArm.elbow.rotation.toArray(),right=dj.rightArm.elbow.rotation.toArray();
+  game.animate(2);
+  assert.notDeepEqual(dj.leftArm.elbow.rotation.toArray(),left);
+  assert.notDeepEqual(dj.rightArm.elbow.rotation.toArray(),right);
+  assert.deepEqual(dj.root.position.toArray(),position);
 });

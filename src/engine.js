@@ -226,16 +226,11 @@
       }
       const dj=addGuest(3,-23.05,8,true);
       dj.role='dj';dj.root.rotation.y=0;dj.root.scale.set(1.04,1.12,.95);
-      dj.body.rotation.x=.16;dj.head.rotation.set(.25,-.12,0);
-      dj.leftArm.pivot.rotation.set(-1.25,-.3,-.16);
-      dj.rightArm.pivot.rotation.set(-1.08,.25,.2);
-      dj.leftArm.elbow.rotation.x=-.7;dj.rightArm.elbow.rotation.x=-.95;
-      // Faceted hands rest over the mixer; the figure remains fixed behind the decks.
-      for(const arm of [dj.leftArm,dj.rightArm])addPart(new THREE.BoxGeometry(.11,.065,.18),getMaterial(0x7199ee,.3),0,-.32,.04,arm.elbow);
+      animateDj(dj,0);
       const band=new THREE.Mesh(new THREE.TorusGeometry(.16,.025,4,8,Math.PI),getMaterial(0x242030,.1));
       band.position.y=.1;dj.head.add(band);
       for(const x of [-.15,.15])addPart(new THREE.BoxGeometry(.055,.13,.12),getMaterial(0xdf8644,.35),x,.04,0,dj.head);
-      for(const x of [1.7,3,4.3])addBox(x,1.23,-21.8,.7,.06,.5,0x11151b,.12);
+      for(const x of [2.45,3,3.55])addBox(x,1.23,-22.5,.48,.06,.5,0x11151b,.12);
     }
     function buildLights(){
       scene.add(new THREE.HemisphereLight(0xdec9ff,0x283a37,1.25));
@@ -394,7 +389,17 @@
       if(cigarette&&player.x<9.6){cigarette=0;showMessage('You stub it out at the door.',3);}
     }
     function rhythmMultiplier(combo){return Math.min(4,1+Math.floor(Math.max(0,combo)/10));}
+    function animateDj(guest,time){
+      const mix=Math.sin(time*.8),cue=Math.sin(time*1.3);
+      guest.body.rotation.x=-.08;
+      guest.head.rotation.set(.18+Math.sin(time*2.2)*.035,mix*.12,0);
+      guest.leftArm.pivot.rotation.set(-.48,0,-.12+mix*.025);
+      guest.leftArm.elbow.rotation.set(-.55, mix*.06,0);
+      guest.rightArm.pivot.rotation.set(-.5+cue*.025,0,.12);
+      guest.rightArm.elbow.rotation.set(-.52,0,cue*.045);
+    }
     function animateGuest(guest,time){
+      if(guest.role==='dj'){animateDj(guest,time);return;}
       if(guest.stationary)return;
       if(guest.smoker){animateSmoker(guest,time);return;}
       updateGuestDrink(guest);
