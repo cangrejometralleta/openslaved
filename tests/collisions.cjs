@@ -128,27 +128,24 @@ check('water and toilets reduce drunkenness only after a completed nearby action
   assert.equal(game.bathroomAction,null);
 });
 
-check('toilet light pulses have dark gaps and follow horizontal and vertical aim',()=>{
+check('toilet water receives a gradual stream independent of the camera',()=>{
   position(.5,-30.05);game.player.angle=0;game.player.pitch=0;game.interact();
+  const spot=game.bathroomAction.spot,water=spot.water;
+  near(water.position.x,.5);near(water.position.y,.43);near(water.position.z,-30.9);
   game.advance(.1);game.updateBathroom();
-  const particles=game.bathroomAction.spot.particles;
-  const drop=particles.children[0];
-  assert.equal(drop.visible,true);
-  assert.ok(particles.children.filter(particle=>particle.visible).length<=2,
-    'brief drops stay separated rather than forming a stream');
-  assert.equal(drop.material.color.getHex(),0xe4faff);
-  assert.equal(drop.children[0].material.blending,THREE.AdditiveBlending);
-  const forward=drop.position.clone();
-  game.player.angle=Math.PI/2;game.updateBathroom();
-  assert.ok(drop.position.x>forward.x);
-  assert.ok(drop.position.z>forward.z);
-  const low=drop.position.y;
-  game.player.pitch=.5;game.updateBathroom();assert.ok(drop.position.y>low);
-  game.advance(.08);game.updateBathroom();
-  assert.equal(drop.visible,false,'each drop disappears within a fraction of a second');
-  game.advance(.42);game.updateBathroom();
-  assert.ok(particles.children.every(particle=>!particle.visible),'entire effect pauses between bursts');
-  game.advance(3);game.updateBathroom();assert.equal(particles.visible,false);
+  const drops=spot.particles.children,drop=drops[0];
+  const initial=drops.filter(p=>p.visible).length;
+  assert.ok(initial>0&&initial<6);
+  const before=drop.position.clone();
+  game.player.angle=Math.PI/2;game.player.pitch=.8;game.updateBathroom();
+  assert.ok(drop.position.distanceTo(before)<1e-9,'looking around must not redirect flow');
+  game.advance(.5);game.updateBathroom();
+  assert.ok(drops.filter(p=>p.visible).length>initial,'flow fills in gradually');
+  game.advance(.049);game.updateBathroom();
+  assert.ok(drop.visible);
+  assert.ok(Math.hypot(drop.position.x-water.position.x,drop.position.z-water.position.z)<.04);
+  assert.ok(Math.abs(drop.position.y-water.position.y)<.01,'drop lands on the water');
+  game.advance(3);game.updateBathroom();assert.equal(spot.particles.visible,false);
 });
 
 check('smoking room doorway is traversable and its outer walls contain the player',()=>{
@@ -206,6 +203,16 @@ check('random guests have room to dance without overlapping furniture',()=>{
   for(const other of dancers.slice(index+1))assert.ok(Math.hypot(g.x-other.x,g.z-other.z)>=1.65);
   for(const box of game.solids)assert.ok(Math.hypot(g.x-Math.max(box.minX,Math.min(box.maxX,g.x)),g.z-Math.max(box.minZ,Math.min(box.maxZ,g.z)))>=.8);
  }
+});
+check('waiting at a toilet starts automatically and does not repeat until leaving',()=>{
+ position(0,-26);game.updateBathroom();
+ position(.5,-30.05);game.updateBathroom();assert.equal(game.bathroomAction,null);
+ game.advance(1.3);game.updateBathroom();assert.equal(game.bathroomAction.spot.kind,'toilet');
+ game.advance(3.6);game.updateBathroom();assert.equal(game.bathroomAction,null);
+ game.advance(5);game.updateBathroom();assert.equal(game.bathroomAction,null);
+ position(0,-26);game.updateBathroom();position(.5,-30.05);game.updateBathroom();
+ game.advance(1.3);game.updateBathroom();assert.equal(game.bathroomAction.spot.kind,'toilet');
+ position(0,-26);game.updateBathroom();assert.equal(game.bathroomAction,null);
 });
 check('hearts appear only when dancing near a guest and fade after leaving',()=>{
  const guest=game.guests.find(g=>!g.stationary&&!g.smoker);
