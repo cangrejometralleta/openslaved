@@ -35,9 +35,6 @@
       new THREE.SphereGeometry(1,12,10).scale(.19,.25,.17).translate(0,.1,-.07)];
     const puffShape=new THREE.IcosahedronGeometry(1,1);
     const smokePuffs=[];
-    const smokeLines=['They nod. "Loud in there, isn\'t it."','"I only come for the second hour. The first is all elbows."',
-      '"My ears ring in a key now. Somewhere near F."','"You dance like you mean it. That is rare."',
-      '"Stay as long as you like. Nobody counts in here."'];
     let smoker=null, cigarette=0, dragUntil=0, exhaled=true;
     const headMaterial=new THREE.MeshStandardMaterial({
       color:0x202a24,roughness:.95,metalness:0,flatShading:false,
@@ -387,7 +384,7 @@
       }
       if(elapsed<dragUntil)return;
       dragUntil=elapsed+1.7;exhaled=false;cigarette--;
-      showMessage(cigarette?`${smokeLines[(5-cigarette)%smokeLines.length]} · ${cigarette} drags left`:'Last drag. You stub it out in the ashtray · E near them for another.',4);
+      showMessage(cigarette?`${cigarette} drags left · E / click: take a drag`:'Last drag. You stub it out in the ashtray · E near them for another.',4);
     }
     function updateCigarette(){
       if(!exhaled&&elapsed>dragUntil-.6){
@@ -599,7 +596,7 @@
         if(drinks>0){giveGuestDrink(near.guest);return;}
         near.guest.shared=true;dancing=true;score.resonate();
         showMessage('They follow your rhythm. Space to dance · walk to stop.');
-      }else showMessage('BAR on the left · RESTROOM at the back · E near someone to say hello.');
+      }else showMessage('BAR on the left · RESTROOM at the back · E near someone to dance together.');
     }
     function updateHints(){
       if(elapsed<messageUntil)return;
@@ -617,7 +614,7 @@
       }
       if(dancing){hint.textContent='Dancing · B to stop · Space on the beat · WASD to walk';return;}
       if(player.x<-5.5&&player.z<-3.5&&player.z>-12.5){hint.textContent='BAR · E: get drinks · Q: sip';return;}
-      if(nearestGuest()){hint.textContent=drinks?'E: share a drink · Space: dance / tap beat':'E: say hello · Space: dance / tap beat';return;}
+      if(nearestGuest()){hint.textContent=drinks?'E: share a drink · Space: dance / tap beat':'E: dance together · Space: dance / tap beat';return;}
       hint.textContent='C: crouch · Space: dance / tap beat · WASD: walk · Shift: run · M: music source · Q: drink · mouse / drag: look · J/R: turn · E / click: interact · Space: dance / tap beat · L: lights';
     }
     function updatePlayer(dt){
