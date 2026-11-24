@@ -560,18 +560,39 @@
       return {x:(forward*Math.sin(angle)+side*Math.cos(angle))/length,
         z:(-forward*Math.cos(angle)+side*Math.sin(angle))/length};
     }
-    let beatGuide;
-    function updateBeatGuide(){
-      if(!beatGuide){beatGuide=document.createElement('div');beatGuide.id='beat-guide';beatGuide.innerHTML='<i></i><span>SPACE</span>';document.querySelector('main').append(beatGuide);}
-      beatGuide.style.display=playing?'flex':'none';
-      const ext=window.clubAudioFrame,phase=ext?.active?ext.phase/(Math.PI*2):beatCount;
+    let heartbeat,heartbeatLabel;
+    function heartbeatPulse(distance){
+      const external=window.clubAudioFrame;
+      return external?.active&&!external.ready?0:Math.max(0,1-distance*4)**2;
+    }
+    function updateHeartbeat(palette,flash){
+      if(!playing)return;
+      if(!heartbeat){
+        heartbeat=document.createElement('div');
+        heartbeat.id='heartbeat';
+        heartbeat.innerHTML='<span class="heart-shape" aria-hidden="true">♥<i></i><span class="heart-sparks"></span></span><span class="heartbeat-label"></span>';
+        heartbeatLabel=heartbeat.querySelector('.heartbeat-label');
+        document.querySelector('main').append(heartbeat);
+      }
+      const ext=window.clubAudioFrame;
       const bpm=ext?.active?(ext.bpm||120):132;
       const ready=!ext?.active||ext.ready;
-      const distance=Math.abs(phase-Math.round(phase));
+      const distance=Math.abs(beatCount-Math.round(beatCount));
       const hitWindow=distance*60/bpm<=.15;
-      beatGuide.classList.toggle('on-beat',ready&&hitWindow);
-      beatGuide.querySelector('i').style.transform=`scale(${.6+(1-distance*2)*.4})`;
-      beatGuide.querySelector('span').textContent=ready?`SPACE · ×${rhythmMultiplier(rhythmCombo)}`:'SYNC…';
+      const pulse=heartbeatPulse(distance);
+      const multiplier=rhythmMultiplier(rhythmCombo);
+      const heartSize=1+(multiplier-1)*.3;
+      const sparkProgress=Math.min(1,(elapsed-lastRhythmTime)/.36);
+      heartbeat.style.setProperty('--heart-size',heartSize);
+      heartbeat.style.setProperty('--heart-pulse',1+pulse*(dancing?.18:.07));
+      heartbeat.style.setProperty('--spark-spread',.55+sparkProgress*.85);
+      heartbeat.style.setProperty('--spark-opacity',1-sparkProgress);
+      heartbeat.style.setProperty('--heart-glow',`${6+pulse*7+(1-sparkProgress)*12}px`);
+      heartbeat.style.setProperty('--heart-signal',.35+pulse*.65);
+      heartbeat.style.setProperty('--heart-light',palette?`#${palette[flash?2:1].getHexString()}`:'#a9a497');
+      heartbeat.classList.toggle('on-beat',ready&&hitWindow);
+      const label=ready?`SPACE · ×${multiplier}`:'SYNC…';
+      if(heartbeatLabel.textContent!==label)heartbeatLabel.textContent=label;
     }
     function rhythmHit(phase,bpm,lastBeat){
       const beat=Math.round(phase),error=Math.abs(phase-beat)*60/bpm;
@@ -590,7 +611,7 @@
         lastRhythmBeat=result.beat;
         rhythmCombo++;rhythmEnergy=Math.min(1,rhythmEnergy+.13);lastRhythmTime=elapsed;
         showMessage(`×${rhythmMultiplier(rhythmCombo)} · ${rhythmCombo} consecutive beats · Space: keep the rhythm · B: stop`,1.4);
-      }else{rhythmCombo=0;rhythmEnergy=Math.max(0,rhythmEnergy-.18);showMessage(phase<result.beat?'Early · wait for the ring':'Late · try the next ring',1);}
+      }else{rhythmCombo=0;rhythmEnergy=Math.max(0,rhythmEnergy-.18);showMessage(phase<result.beat?'Early · wait for the heartbeat':'Late · try the next heartbeat',1);}
     }
     function showMessage(message,duration=5){hint.textContent=message;messageUntil=elapsed+duration;}
     function nearestGuest(){
@@ -734,7 +755,7 @@
       const speed=(keys.has('shift')?5.6:3.1)*(keyed||!push?1:.35+.65*push);
       if(moving&&seatedAtBar)leaveSeat();
       if(moving){movePlayer(movement.x*dt*speed,movement.z*dt*speed);dancing=false;}
-      const dancePhase=window.clubAudioFrame?.active?window.clubAudioFrame.phase:elapsed*13.82;
+      const dancePhase=beatCount*Math.PI*2;
       const jump=jumpTime<0?0:Math.sin(Math.min(1,jumpTime/.72)*Math.PI)*.72;
       if(jumpTime>=0){jumpTime+=dt;if(jumpTime>=.72)jumpTime=-1;}
       const bob=moving?Math.abs(Math.sin(elapsed*13))*.075:dancing?Math.sin(dancePhase)*.08:0;
@@ -838,6 +859,7 @@
       lights.forEach(light=>{light.intensity=softMode?45:28+flash*(65+rhythmEnergy*90);});
       beams.forEach(beam=>{beam.material.opacity=softMode?.025:.025+rhythmEnergy*.085;});
       renderer.toneMappingExposure=softMode?1.12:1.12+rhythmEnergy*.25;
+      return flash;
     }
     let bathroomScreen,clubScreen,screenSurface,screenBrush,screenTexture,videoTexture,screenVideo;
     function updateScreen(){
@@ -1005,15 +1027,16 @@
       view.add(new THREE.Mesh(new THREE.PlaneGeometry(2,2),material));
       return {target,uniforms,view,camera:new THREE.Camera()};
     }
-    function renderClub(){
+    function renderClub(flash){
       const pastEntranceTurn=player.z>0&&player.z<entranceTurnZ;
       const intense=playing&&!softMode&&(pastEntranceTurn||readRoomDistance()<.7);
       projectionState.clubPhase.value=intense?visualMusic.beat*.65:0;
       projectionState.clubMelody.value=intense?visualMusic.melody:0;
       projectionState.clubStrength.value=intense?.86:0;
-      if(!intense){renderer.render(scene,camera);return;}
       const beat=Math.floor(Math.max(0,beatCount));
-      const palette=strobePalettes[strobePhrase[beat%strobePhrase.length]];
+      const palette=intense?strobePalettes[strobePhrase[beat%strobePhrase.length]]:null;
+      updateHeartbeat(palette,flash);
+      if(!palette){renderer.render(scene,camera);return;}
       [colorPass.uniforms.ink.value,colorPass.uniforms.midtone.value,colorPass.uniforms.paper.value]=palette;
       colorPass.uniforms.strength.value=.65+Math.min(1,rhythmEnergy)*.35;
       renderer.setRenderTarget(colorPass.target);renderer.render(scene,camera);
@@ -1032,8 +1055,8 @@
       const dt=Math.min(.08,Math.max(0,(time-last)/1000||0));last=time;
       if(!document.hidden){
         clockTime+=dt;updateWorld(dt);updateVisualMusic(dt);
-        guests.forEach(guest=>animateGuest(guest,clockTime));updateSmoke(dt);updateLights();updateScreen();updateWallEffects();updateFloorEffects();updateHeldDrink();updateBeatGuide();
-        renderClub();
+        guests.forEach(guest=>animateGuest(guest,clockTime));updateSmoke(dt);const flash=updateLights();updateScreen();updateWallEffects();updateFloorEffects();updateHeldDrink();
+        renderClub(flash);
       }
       requestAnimationFrame(drawFrame);
     }

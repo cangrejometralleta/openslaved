@@ -82,8 +82,40 @@
         background:#b7ff36cc;border:1px solid #e2ffd6;box-shadow:0 0 14px #b7ff3688;}
       #action-gyro {grid-column:1 / -1;} #action-gyro.on {background:#41551f;color:#e2ffd6;}
       .hint {top:62px;bottom:auto;left:8px;right:8px;max-width:none;font-size:9px;}
-      main #beat-guide {bottom:236px;white-space:nowrap;}
+      main #heartbeat {bottom:236px;}
       .keys {display:none;}
     }
 
-#beat-guide{position:absolute;left:50%;bottom:66px;transform:translateX(-50%);display:flex;gap:9px;align-items:center;pointer-events:none;color:#a9a497;font:11px monospace;background:#101014a8;padding:7px 12px;border-radius:20px} #beat-guide i{width:14px;height:14px;border:2px solid #747b8e;border-radius:50%;display:block} #beat-guide.on-beat{color:#f3dfb1} #beat-guide.on-beat i{border-color:#e9b65b;background:#e9b65b33}
+#heartbeat {
+  position:absolute;left:50%;bottom:66px;transform:translateX(-50%);
+  display:grid;justify-items:center;gap:5px;pointer-events:none;white-space:nowrap;
+  color:#a9a497;font:11px monospace;
+}
+.heart-shape {
+  position:relative;display:grid;place-items:center;
+  width:64px;height:60px;color:#050506;font:60px/1 Arial,sans-serif;
+  -webkit-text-stroke:1px var(--heart-light);
+  filter:drop-shadow(0 0 3px var(--heart-light))
+    drop-shadow(0 0 var(--heart-glow) var(--heart-light));
+  transform-origin:center bottom;
+  transform:scale(var(--heart-size)) scale(var(--heart-pulse));
+}
+.heart-shape i {
+  position:absolute;left:50%;top:46%;transform:translate(-50%,-50%);
+  width:25px;height:14px;background:var(--heart-light);opacity:var(--heart-signal);
+  clip-path:polygon(0 49%,24% 49%,38% 19%,52% 72%,69% 33%,79% 49%,100% 49%,100% 60%,75% 60%,70% 50%,51% 96%,37% 42%,28% 60%,0 60%);
+}
+.heart-sparks {
+  position:absolute;left:50%;top:46%;width:3px;height:3px;border-radius:50%;
+  opacity:var(--spark-opacity);
+  transform:translate(-50%,-50%) scale(var(--spark-spread));
+  box-shadow:-24px -13px 1px #ffe7a4, -12px -25px 0 #fff,
+    6px -27px 1px #ffe7a4, 20px -20px 0 #fff, 27px -6px 1px #ffe7a4,
+    22px 11px 0 #fff, -21px 12px 0 #fff, -29px 1px 1px #ffe7a4;
+}
+.heartbeat-label {background:#101014df;border-radius:20px;padding:3px 8px;}
+#heartbeat.on-beat {color:#f3dfb1;}
+@media (prefers-reduced-motion:reduce) {
+  .heart-shape {transform:scale(var(--heart-size));}
+  .heart-sparks {transform:translate(-50%,-50%);}
+}
