@@ -484,7 +484,7 @@
       guest.leftLeg.elbow.rotation.x=Math.max(0,-pose(0))*.65*strength;
       guest.rightLeg.elbow.rotation.x=Math.max(0,pose(0))*.65*strength;
       guest.ghosts.forEach((echo,index)=>{echo.visible=false;echo.position.x=(index?1:-1)*(.06+Math.abs(pose(0))*.09);});
-      if(guest.shared)guest.body.rotation.y+=Math.sin(phase*1.5)*.18;
+      if(guest===danceGuest)guest.body.rotation.y+=Math.sin(phase*1.5)*.18;
       if(guest.drinkUntil>elapsed){
         guest.rightArm.pivot.rotation.set(-2.3,0,-.25);
         guest.rightArm.elbow.rotation.x=-1.2;
@@ -590,9 +590,9 @@
           new THREE.MeshBasicMaterial({color:0xffca55}));
         guest.cup.position.set(0,-.34,0);guest.rightArm.elbow.add(guest.cup);
       }
-      drinks--;sipsLeft=6;guest.shared=true;guest.drinkUntil=elapsed+guestDrinkDuration;
+      drinks--;sipsLeft=6;guest.drinkUntil=elapsed+guestDrinkDuration;
       guest.cup.visible=true;dancing=true;score.resonate();
-      showMessage(`They take your glass and drink. Remaining: ${drinks} · Space: dance together.`);
+      showMessage(`They take your glass and drink. Remaining: ${drinks} · Space: keep the rhythm.`);
     }
     function nearestBathroom(){
       return bathroomSpots.find(spot=>Math.hypot(player.x-spot.x,player.z-spot.z)<.95);
@@ -673,12 +673,8 @@
       }
       if(player.z<-24.5){useBathroom();return;}
       if(player.x>10.3){shareSmoke();return;}
-      const near=nearestGuest();
-      if(near){
-        if(drinks>0){giveGuestDrink(near.guest);return;}
-        near.guest.shared=true;dancing=true;score.resonate();
-        showMessage('They follow your rhythm. Space to dance · walk to stop.');
-      }else showMessage('BAR on the left · RESTROOM at the back · E near someone to dance together.');
+      const near=drinks>0?nearestGuest():null;
+      if(near)giveGuestDrink(near.guest);
     }
     function updateHints(){
       if(elapsed<messageUntil)return;
@@ -694,9 +690,9 @@
         hint.textContent=spot?(spot.kind==='water'?'Stand here to drink water · reduces drunkenness':'Stand here to use toilet · reduces drunkenness'):'RESTROOM · water fountains right · toilets in rear stalls';
         return;
       }
-      if(dancing){hint.textContent='Dancing · B to stop · Space on the beat · WASD to walk';return;}
+      if(dancing){hint.textContent=`${danceGuest?'Dancing together':'Dancing'} · B to stop · Space on the beat · WASD to walk`;return;}
       if(player.x<-5.5&&player.z<-3.5&&player.z>-12.5){hint.textContent='BAR · E: get drinks · Q: sip';return;}
-      if(nearestGuest()){hint.textContent=drinks?'E: share a drink · Space: dance / tap beat':'E: dance together · Space: dance / tap beat';return;}
+      if(nearestGuest()){hint.textContent=drinks?'E: share a drink · Space: dance / tap beat':'B / Space: dance with someone nearby';return;}
       hint.textContent='Space: dance / tap beat · WASD: walk · Shift: run · M: music source · Q: drink · mouse / drag: look · J/R: turn · E / click: interact · Space: dance / tap beat · L: lights';
     }
     function updatePlayer(dt){
@@ -736,12 +732,17 @@
         danceHearts.push({mesh,born:-Infinity,x:0,z:0});
       }
     }
+    let danceGuest=null;
     function updateHearts(){
-      const near=dancing?nearestGuest():null;
-      if(near&&elapsed>=heartNext){
+      const nearbyGuest=dancing?nearestGuest()?.guest??null:null;
+      if(nearbyGuest!==danceGuest){
+        danceGuest=nearbyGuest;
+        heartNext=elapsed;
+      }
+      if(danceGuest&&elapsed>=heartNext){
         if(!danceHearts.length)buildHearts();
         const heart=danceHearts.find(heart=>elapsed-heart.born>=heartLifetime);
-        if(heart){heart.born=elapsed;heart.x=near.guest.x;heart.z=near.guest.z;}
+        if(heart){heart.born=elapsed;heart.x=danceGuest.x;heart.z=danceGuest.z;}
         heartNext=elapsed+heartInterval;
       }
       for(const heart of danceHearts){
@@ -1061,7 +1062,7 @@
       bathroomAction=null;bathroomWait=null;bathroomDone=null;bathroomSpots.forEach(spot=>{spot.particles.visible=false;if(spot.ripple)spot.ripple.visible=false;});
       playing=true;rhythmEnergy=0;rhythmCombo=0;lastRhythmBeat=-Infinity;lastRhythmTime=-Infinity;seatedAtBar=false;tipsiness=0;elapsed=0;beatCount=0;pulse=0;dancing=false;drinks=0;sipsLeft=6;sipUntil=0;cigarette=0;dragUntil=0;exhaled=true;jumpTime=-1;keys.clear();stick.id=null;stick.x=stick.y=0;gyro.calibrate=gyro.on;
       Object.assign(player,entranceSpawn);
-      heartNext=0;danceHearts.forEach(heart=>{heart.born=-Infinity;heart.mesh.visible=false;});
+      danceGuest=null;heartNext=0;danceHearts.forEach(heart=>{heart.born=-Infinity;heart.mesh.visible=false;});
       guests.forEach(guest=>{guest.shared=false;guest.drinkUntil=0;if(guest.cup)guest.cup.visible=false;});
       signals.forEach(signal=>signal.got=false);pips.forEach(pip=>pip.classList.remove('on'));
       intro.classList.add('hidden');ending.classList.add('hidden');document.querySelector('main').classList.add('active');

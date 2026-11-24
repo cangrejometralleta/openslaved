@@ -18,7 +18,7 @@ const source=fs.readFileSync(path.join(__dirname,'../src/engine.js'),'utf8');
 const instrumented=source.replace('    bootScene();',`    globalThis.game={player,solids,guests,movePlayer,readMovement,resolvePosition,findContact,
       createWorld(){scene=new THREE.Scene();camera=new THREE.PerspectiveCamera();buildRoom();buildGuests();return scene;},
       animate(time){guests.forEach(guest=>animateGuest(guest,time));},
-      updateHearts,get danceHearts(){return danceHearts;},setDancing(value){dancing=value;},interact,drinkCup,updateBathroom,updateCigarette,readRoomDistance,get cigarette(){return cigarette;},get smoker(){return smoker;}, get tipsiness(){return tipsiness;},get bathroomAction(){return bathroomAction;}, get drinks(){return drinks;},get dancing(){return dancing;},
+      updateHearts,get danceHearts(){return danceHearts;},get danceGuest(){return danceGuest;},setDancing(value){dancing=value;},activateControl,interact,drinkCup,updateBathroom,updateCigarette,readRoomDistance,get cigarette(){return cigarette;},get smoker(){return smoker;}, get tipsiness(){return tipsiness;},get bathroomAction(){return bathroomAction;}, get drinks(){return drinks;},get dancing(){return dancing;},
       advance(seconds){elapsed+=seconds;return elapsed;},
       stick,gyro,stickPush,readGyro,turnView,setPlaying(value){playing=value;}};`);
 vm.runInContext(instrumented,sandbox);
@@ -109,7 +109,8 @@ check('sharing a drink triggers a dance without a countdown ending',()=>{
   assert.equal(recipient.drinkUntil,drinkUntil,'empty hands cannot start another drink');
   game.animate(1);assert.equal(recipient.rightArm.pivot.rotation.x,-2.3);
   game.advance(4);game.animate(4);assert.equal(recipient.cup.visible,false);
-  game.interact();assert.equal(game.drinks,0);
+  game.setDancing(false);game.activateControl('e');assert.equal(game.drinks,0);
+  assert.equal(game.dancing,false,'interacting empty-handed does not start a dance');
   assert.equal(recipient.cup.visible,false,'no second glass appears after the first is finished');
   assert.equal(game.advance(36000),36004);
   assert.ok(!source.includes('function finish('));
@@ -236,12 +237,16 @@ check('waiting at a toilet starts automatically and does not repeat until leavin
  game.advance(1.3);game.updateBathroom();assert.equal(game.bathroomAction.spot.kind,'toilet');
  position(0,-26);game.updateBathroom();assert.equal(game.bathroomAction,null);
 });
-check('hearts appear only when dancing near a guest and fade after leaving',()=>{
+check('dancing near a guest automatically starts a shared dance and hearts fade after leaving',()=>{
  const guest=game.guests.find(g=>!g.stationary&&!g.smoker);
- position(guest.x,guest.z+.7);game.setDancing(false);game.updateHearts();
+ position(guest.x,guest.z);game.setDancing(false);game.updateHearts();
+ assert.equal(game.dancing,false);
+ assert.equal(game.danceGuest,null);
  assert.equal(game.danceHearts.length,0);
- game.setDancing(true);game.updateHearts();game.advance(.2);game.updateHearts();
+ game.activateControl('b');game.updateHearts();game.advance(.2);game.updateHearts();
+ assert.equal(game.danceGuest,guest);
  assert.ok(game.danceHearts.some(h=>h.mesh.visible&&h.mesh.material.opacity>0));
- game.setDancing(false);position(0,-2.5);game.advance(3);game.updateHearts();
+ position(0,2.5);game.advance(3);game.updateHearts();
+ assert.equal(game.danceGuest,null);
  assert.ok(game.danceHearts.every(h=>!h.mesh.visible));
 });
