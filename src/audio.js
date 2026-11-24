@@ -29,6 +29,17 @@ function createRoomSound(context,destination){
       let running=false, enabled=true, nextTime=0, step=0, seenSignals=0;
       let previousPitch=55, previousSlide=false, resonance=0, scheduler, fadeTimer;
       let phrase, accents, slides, color=1, swing=0;
+      const visualNotes=[];
+      let visualNote;
+
+      function readVisualMusic(){
+        if(!running||context.state!=='running')return null;
+        const time=context.getOutputTimestamp?.().contextTime ||
+          context.currentTime-(context.outputLatency||context.baseLatency||0);
+        while(visualNotes.length&&visualNotes[0].time<=time)visualNote=visualNotes.shift();
+        const melody=visualNote?visualNote.height*Math.max(0,1-(time-visualNote.time)/(stepLength*1.5)):0;
+        return {beat:Math.max(0,(step+(time-nextTime)/stepLength)/4),melody};
+      }
 
       function setLevel(){
         toggle.textContent=enabled?'Sound: on':'Sound: off';
@@ -176,6 +187,8 @@ function createRoomSound(context,destination){
           playNoise(noteTime,.035,(position%2?.035:.07)*(.8+Math.random()*.4),7800,-.3);
         if(bar%4===3&&position>12)playNoise(time,.055,.08,2100,-.1,true);
         playAcid(noteTime,phrase[position],accents[position],slides[position],state.level);
+        const note=phrase[position];
+        visualNotes.push({time:noteTime,height:note===null?0:(.3+note/24)*(accents[position]?1:.8)});
         if(state.collected>0&&position%8===6)
           playChime(time,[0,7,10,15][bar%4],Math.sin(bar)*.65);
         if(bar%8>=6&&position%4===2)playLead(time,position/2,bar);
@@ -193,6 +206,7 @@ function createRoomSound(context,destination){
           clearTimeout(fadeTimer);await context.resume();
           if(!isPlaying())return;
           step=0;previousSlide=false;seenSignals=0;resonance=0;running=true;nextTime=context.currentTime+.045;
+          visualNotes.length=0;visualNote=null;
           mix.gain.cancelScheduledValues(context.currentTime);
           mix.gain.setTargetAtTime(1,context.currentTime,.08);
           clearInterval(scheduler);scheduler=setInterval(scheduleScore,25);scheduleScore();
@@ -227,7 +241,7 @@ function createRoomSound(context,destination){
       toggle.addEventListener('click',()=>{
         if(running&&context.state!=='running')context.resume().catch(()=>{});
       });
-      return {start:startScore,stop:stopScore,resonate:resonateScore};
+      return {start:startScore,stop:stopScore,resonate:resonateScore,readVisualMusic};
     }
 
 

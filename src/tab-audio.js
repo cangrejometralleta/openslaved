@@ -64,6 +64,16 @@ function bandEnergy(spectrum, sampleRate, fftSize, low, high) {
 const bassEnergy = (spectrum, rate, size) =>
   bandEnergy(spectrum, rate, size, 35, 220);
 
+function melodicContour(spectrum, sampleRate, fftSize) {
+  const binWidth=sampleRate/fftSize;
+  let peak=-Infinity, frequency=180;
+  for(let bin=Math.ceil(180/binWidth);bin<spectrum.length&&bin*binWidth<=2200;bin++){
+    if(spectrum[bin]<=peak)continue;
+    peak=spectrum[bin];frequency=bin*binWidth;
+  }
+  const strength=Math.min(1,Math.max(0,(peak+75)/35));
+  return strength*(.3+.7*Math.log(frequency/180)/Math.log(2200/180));
+}
 
 const host=document.createElement('div');
 host.className='tab-audio-controls';
@@ -79,7 +89,7 @@ let lastVideo=0,livePhase=0,livePulse=0;
 const delayedPicture=window.clubProjectionCanvas=document.createElement("canvas");delayedPicture.width=480;delayedPicture.height=270;const pictureBrush=delayedPicture.getContext("2d");
 const tracker=new PulseTracker();
 const projection=window.clubVideoElement=document.createElement('video');projection.muted=true;projection.playsInline=true;projection.autoplay=true;
-const frame=window.clubAudioFrame={active:false,onset:false,bpm:null,energy:0,phase:0,pulse:0};
+const frame=window.clubAudioFrame={active:false,onset:false,bpm:null,energy:0,phase:0,pulse:0,melody:0};
 let roomSound;
 function release(notify=true){
   roomSound?.dispose();roomSound=null;
@@ -87,7 +97,7 @@ function release(notify=true){
   if(stream)stream.getTracks().forEach(track=>track.stop());
   stream=null;projection.pause();projection.srcObject=null;source?.disconnect();analyser?.disconnect();muted?.disconnect();
   context?.close().catch(()=>{});context=null;
-  Object.assign(frame,{active:false,onset:false,bpm:null,energy:0,phase:0,pulse:0});tracker.reset();
+  Object.assign(frame,{active:false,ready:false,onset:false,bpm:null,energy:0,phase:0,pulse:0,melody:0});tracker.reset();
   button.disabled=false;button.textContent='Music source · M';
   if(notify)window.dispatchEvent(new CustomEvent('club-audio-source',{detail:{external:false}}));
 }
@@ -100,7 +110,8 @@ function sample(now){
   const bpm=tracker.update(bass,t,.018),onset=tracker.onset;
   if(onset){livePulse=1;livePhase=Math.round(livePhase/(Math.PI*2))*Math.PI*2;}else livePulse*=Math.exp(-dt*12);
   livePhase+=dt*(bpm||120)/60*Math.PI*2;
-  analysisQueue.push({time:t,bpm,onset,energy:Math.min(1,bass*4),pulse:livePulse,phase:livePhase});
+  const melody=melodicContour(spectrum,context.sampleRate,analyser.fftSize);
+  analysisQueue.push({time:t,bpm,onset,energy:Math.min(1,bass*4),pulse:livePulse,phase:livePhase,melody});
   const due=t-syncDelay-(context.outputLatency||context.baseLatency||0);
   frame.onset=false;
   while(analysisQueue.length&&analysisQueue[0].time<=due){const ready=analysisQueue.shift();Object.assign(frame,ready,{onset:frame.onset||ready.onset});}

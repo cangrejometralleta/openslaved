@@ -17,7 +17,7 @@ vm.runInContext(fs.readFileSync(path.join(__dirname,'../src/audio.js'),'utf8'),s
 const source=fs.readFileSync(path.join(__dirname,'../src/engine.js'),'utf8');
 const instrumented=source.replace('    bootScene();',`    globalThis.game={player,solids,guests,movePlayer,readMovement,resolvePosition,findContact,
       createWorld(){scene=new THREE.Scene();camera=new THREE.PerspectiveCamera();buildRoom();buildGuests();return scene;},
-      animate(time){guests.forEach(guest=>animateGuest(guest,time));},
+      animate(time){guests.forEach(guest=>animateGuest(guest,time));},animateGuest,updateVisualMusic,
       updateHearts,get danceHearts(){return danceHearts;},get danceGuest(){return danceGuest;},setDancing(value){dancing=value;},activateControl,interact,drinkCup,updateBathroom,updateCigarette,readRoomDistance,get cigarette(){return cigarette;},get smoker(){return smoker;}, get tipsiness(){return tipsiness;},get bathroomAction(){return bathroomAction;}, get drinks(){return drinks;},get dancing(){return dancing;},
       advance(seconds){elapsed+=seconds;return elapsed;},
       stick,gyro,stickPush,readGyro,turnView,setPlaying(value){playing=value;}};`);
@@ -193,6 +193,35 @@ check('guests vary in silhouette and all end in hands and feet',()=>{
   assert.ok(new Set(dancers.map(outline)).size>=15,'most dancers are told apart by build and dance style');
   for(const guest of game.guests)for(const limb of [guest.leftArm,guest.rightArm,guest.leftLeg,guest.rightLeg])
     assert.ok(limb.elbow.children.length>=3,'joint, lower limb and hand or foot');
+});
+check('beat and melody drive different dancers independently',()=>{
+  const dancers=game.guests.filter(guest=>!guest.stationary&&!guest.smoker);
+  const beatGuest=dancers.find(guest=>guest.danceMusic==='beat');
+  const melodyGuest=dancers.find(guest=>guest.danceMusic==='melody');
+  const pose=guest=>guest.leftArm.pivot.rotation.x;
+  const sample=()=>{
+    game.updateVisualMusic(1);
+    game.animateGuest(beatGuest,1);game.animateGuest(melodyGuest,1);
+  };
+  const audio=sandbox.window.clubAudioFrame={active:true,phase:2*Math.PI,melody:.2};
+  game.setPlaying(true);
+  sample();
+  const beatPose=pose(beatGuest),melodyPose=pose(melodyGuest);
+  audio.melody=.8;sample();
+  assert.equal(pose(beatGuest),beatPose);
+  const newMelodyPose=pose(melodyGuest);
+  assert.notEqual(newMelodyPose,melodyPose);
+  audio.phase=3*Math.PI;sample();
+  assert.notEqual(pose(beatGuest),beatPose);
+  near(pose(melodyGuest),newMelodyPose,1e-6);
+  const melodyPoses=[0,.225,.45,.675,.9].map(melody=>{
+    audio.melody=melody;sample();
+    return [melodyGuest.body.rotation.z,melodyGuest.body.position.y,melodyGuest.head.rotation.y];
+  });
+  assert.equal(new Set(melodyPoses.map(pose=>pose.map(value=>value.toFixed(2)).join(','))).size,5);
+  assert.ok(melodyPoses[1][1]<melodyPoses[0][1]&&melodyPoses[2][1]>melodyPoses[0][1],
+    'melodic poses move both down and up as the contour rises');
+  sandbox.window.clubAudioFrame=null;game.setPlaying(false);
 });
 check('the smoker shares a cigarette that lasts six drags and is stubbed out at the door',()=>{
   const smoker=game.smoker;assert.ok(smoker.smoker&&!smoker.stationary);

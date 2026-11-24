@@ -340,7 +340,8 @@
         addPart(torsoShape,material,0,.31,0,echo);
         addPart(headShape,material,0,1.04,0,echo);return echo;
       });
-      const guest={x,z,index,root,body,head,leftArm,rightArm,leftLeg,rightLeg,ghosts,stationary,style:look.style,shared:false,radius:.27};
+      const danceMusic=index%3===1?'melody':'beat';
+      const guest={x,z,index,root,body,head,leftArm,rightArm,leftLeg,rightLeg,ghosts,stationary,danceMusic,style:look.style,shared:false,radius:.27};
       // Back-facing shells provide a luminous silhouette while preserving the continuous body contour.
       const surfaces=[];body.traverse(object=>{if(object.isMesh&&!ghosts.some(e=>e===object.parent))surfaces.push(object);});
       const haloMaterial=new THREE.MeshBasicMaterial({color:0xf1ffe8,side:THREE.BackSide,transparent:true,opacity:.38,depthWrite:false});
@@ -451,21 +452,40 @@
       guest.rightArm.pivot.rotation.set(-.5+cue*.025,0,.12);
       guest.rightArm.elbow.rotation.set(-.52,0,cue*.045);
     }
+    const beatPoses=[-1,.3,1,-.45,-.8,.65,.15,1];
+    // Lean, lift, head turn and partner turn, from subdued to full reach.
+    const melodyPoses=[
+      [0,.08,0,.1],
+      [-.72,-.26,.38,-.35],
+      [.25,.86,-.55,.48],
+      [.82,-.38,-.28,.85],
+      [-.36,1,.72,-.62],
+    ];
     function animateGuest(guest,time){
       if(guest.role==='dj'){animateDj(guest,time);return;}
       if(guest.stationary)return;
       if(guest.smoker){animateSmoker(guest,time);return;}
       updateGuestDrink(guest);
-      const external=window.clubAudioFrame;
       const multiplier=rhythmMultiplier(rhythmCombo);
       const expression=softMode?1:1+(multiplier-1)*.16;
       const cadence=softMode?2:[2,2,3,4][multiplier-1];
-      const step=(playing?beatCount:time*132/60)*cadence+guest.index%4;
+      const step=(playing?visualMusic.beat:time*132/60)*cadence+guest.index%4;
       const frame=Math.floor(step), transition=Math.min(1,(step-frame)/(softMode?.45:[.32,.22,.12,.06][multiplier-1]));
       const blend=transition*transition*(3-2*transition);
-      const phase=(frame-1+blend)*Math.PI/2;
-      const poses=[-1,.3,1,-.45,-.8,.65,.15,1];
-      const pose=offset=>{const shift=Math.round(offset/(Math.PI/2)), current=((frame+shift)%8+8)%8,previous=(current+7)%8;return poses[previous]*(1-blend)+poses[current]*blend;};
+      const followsMelody=playing&&guest.danceMusic==='melody';
+      const melodyStep=Math.min(1,visualMusic.melody/.9)*(melodyPoses.length-1);
+      const melodyFrame=Math.min(Math.floor(melodyStep),melodyPoses.length-2);
+      const fraction=melodyStep-melodyFrame, melodyBlend=fraction*fraction*(3-2*fraction);
+      const personalPhase=guest.index*2.37, side=guest.index%2?1:-1;
+      const pose=offset=>{
+        const shift=Math.round(offset/(Math.PI/2));
+        if(followsMelody){
+          const movement=THREE.MathUtils.lerp(melodyPoses[melodyFrame][shift],melodyPoses[melodyFrame+1][shift],melodyBlend);
+          return movement*(shift===1?1:side)+Math.sin(time*1.4+personalPhase+offset)*.12;
+        }
+        const current=((frame+shift)%8+8)%8,previous=(current+7)%8;
+        return beatPoses[previous]*(1-blend)+beatPoses[current]*blend;
+      };
       const strength=expression,{lift,bounce,twist,stride}=guest.style;
       const distance=Math.hypot(player.x-guest.x,player.z-guest.z);
       const presence=Math.max(0,1-distance/7)*.3;
@@ -484,7 +504,7 @@
       guest.leftLeg.elbow.rotation.x=Math.max(0,-pose(0))*.65*strength;
       guest.rightLeg.elbow.rotation.x=Math.max(0,pose(0))*.65*strength;
       guest.ghosts.forEach((echo,index)=>{echo.visible=false;echo.position.x=(index?1:-1)*(.06+Math.abs(pose(0))*.09);});
-      if(guest===danceGuest)guest.body.rotation.y+=Math.sin(phase*1.5)*.18;
+      if(guest===danceGuest)guest.body.rotation.y+=pose(Math.PI*1.5)*.18;
       if(guest.drinkUntil>elapsed){
         guest.rightArm.pivot.rotation.set(-2.3,0,-.25);
         guest.rightArm.elbow.rotation.x=-1.2;
@@ -832,13 +852,24 @@
       if(videoTexture){videoTexture.dispose();videoTexture=null;screenVideo=null;}
       if(clubScreen.material.map!==screenTexture){clubScreen.material.map=screenTexture;clubScreen.material.needsUpdate=true;}
       clubScreen.scale.setScalar(.7);bathroomScreen.scale.setScalar(.42);
-      const c=screenBrush,t=softMode?0:clockTime*.15;c.fillStyle='#090516';c.fillRect(0,0,768,432);c.save();c.translate(384,216);
+      const c=screenBrush,t=softMode?0:visualMusic.beat*.07;
+      const width=softMode?38:38+visualMusic.melody*16;
+      c.fillStyle='#090516';c.fillRect(0,0,768,432);c.save();c.translate(384,216);
       for(let ring=5;ring>0;ring--)for(let part=0;part<12;part++){
         c.save();c.rotate(part*Math.PI/6+t*(ring%2?1:-1));c.fillStyle=['#dbaf65','#4969b0','#e2d9b6','#8e6242'][ring%4];
-        c.beginPath();c.moveTo(ring*31,0);c.lineTo(ring*47,38+Math.sin(t)*12);c.lineTo(ring*55,0);c.lineTo(ring*47,-38-Math.sin(t)*12);c.closePath();c.fill();c.restore();
+        c.beginPath();c.moveTo(ring*31,0);c.lineTo(ring*47,width);c.lineTo(ring*55,0);c.lineTo(ring*47,-width);c.closePath();c.fill();c.restore();
       }
       c.restore();screenTexture.needsUpdate=true;
     }
+    const visualMusic={beat:0,melody:0};
+    function updateVisualMusic(dt){
+      const external=window.clubAudioFrame;
+      const internal=playing&&!external?.active?score.readVisualMusic():null;
+      visualMusic.beat=external?.active?external.phase/(Math.PI*2):internal?.beat??beatCount;
+      const melody=playing?(external?.active?external.melody:internal?.melody)??0:0;
+      visualMusic.melody+=(melody-visualMusic.melody)*(1-Math.exp(-dt*16));
+    }
+    // Rhythm group: floor ripples travel one cycle per beat.
     let floorGlow;
     function updateFloorEffects(){
       if(!floorGlow){
@@ -850,7 +881,7 @@
             varying vec2 floorUv;uniform float phase;uniform float energy;uniform float gentle;
             void main(){
               vec2 p=(floorUv-.5)*vec2(20.,24.);
-              p.x+=sin(p.y*.55+phase*.18)*.65*(1.-gentle);
+              p.x+=sin(p.y*.55-phase*6.2831853)*.65*(1.-gentle);
               vec2 grid=abs(fract(p*.48+vec2(0.,phase*.035))-.5);
               float seams=1.-smoothstep(.025,.065,min(grid.x,grid.y));
               float zigzag=abs(fract(p.x*.16+phase*.025)-.5)*4.;
@@ -867,10 +898,11 @@
         floorGlow=new THREE.Mesh(new THREE.PlaneGeometry(19.9,23.8),material);
         floorGlow.rotation.x=-Math.PI/2;floorGlow.position.set(0,.014,-12);scene.add(floorGlow);
       }
-      floorGlow.material.uniforms.phase.value=softMode?0:beatCount;
+      floorGlow.material.uniforms.phase.value=softMode?0:visualMusic.beat;
       floorGlow.material.uniforms.energy.value=rhythmEnergy;
       floorGlow.material.uniforms.gentle.value=softMode?1:0;
     }
+    // Melody group: notes bend the rings across the walls and ceiling.
     let wallTexture,wallBrush,wallTick=-1;
     function updateWallEffects(){
       if(!wallTexture){
@@ -884,14 +916,14 @@
         const ceiling=new THREE.Mesh(new THREE.PlaneGeometry(16,20),material);ceiling.rotation.x=Math.PI/2;ceiling.position.set(0,4.49,-12);scene.add(ceiling);
       }
       const frame=Math.floor(clockTime*20);if(frame===wallTick)return;wallTick=frame;
-      const c=wallBrush,t=softMode?0:beatCount*.12;
+      const c=wallBrush,melody=softMode?0:visualMusic.melody;
       c.fillStyle='#080c12';c.fillRect(0,0,512,256);
       const palette=['#baff00','#00ffcc','#ff21d4','#f0ffd6'];
       c.globalAlpha=softMode?.18:.9;
       for(let ring=18;ring>=0;ring--){
-        const radius=12+ring*22+(t*22)%22;
-        const offset=Math.sin(t*.6)*42;
-        c.strokeStyle=palette[(ring+Math.floor(t/4))%palette.length];
+        const radius=12+ring*22+Math.sin(ring*.55)*melody*18;
+        const offset=Math.cos(ring*.4)*melody*42;
+        c.strokeStyle=palette[ring%palette.length];
         c.lineWidth=softMode?2:8+rhythmEnergy*3;c.beginPath();
         for(let corner=0;corner<=4;corner++){
           const angle=corner*Math.PI/2+Math.PI/4;
@@ -903,7 +935,8 @@
       }
       c.globalAlpha=1;wallTexture.needsUpdate=true;
     }
-    const projectionState={clubPhase:{value:0},clubStrength:{value:0}};
+    // Combined group: the beat moves the projection while the melody bends it.
+    const projectionState={clubPhase:{value:0},clubMelody:{value:0},clubStrength:{value:0}};
     let colorPass;
     function projectMaterial(material){
       if(material.transparent||(material.map&&material!==floor.material)||material.userData.clubProjection)return;
@@ -913,9 +946,10 @@
         shader.vertexShader='varying vec3 clubPosition;\n'+shader.vertexShader;
         shader.vertexShader=shader.vertexShader.replace('#include <project_vertex>',
           '#include <project_vertex>\nclubPosition=(modelMatrix*vec4(transformed,1.)).xyz;');
-        shader.fragmentShader='varying vec3 clubPosition;uniform float clubPhase;uniform float clubStrength;\n'+shader.fragmentShader;
+        shader.fragmentShader='varying vec3 clubPosition;uniform float clubPhase;uniform float clubMelody;uniform float clubStrength;\n'+shader.fragmentShader;
         shader.fragmentShader=shader.fragmentShader.replace('#include <tonemapping_fragment>',`
-          float clubBand=sin(clubPosition.x*2.8+clubPosition.y*4.2+clubPosition.z*1.6-clubPhase);
+          float clubBend=sin(clubPosition.y*2.1+clubPosition.z*.45)*clubMelody*2.4;
+          float clubBand=sin(clubPosition.x*2.8+clubPosition.y*4.2+clubPosition.z*1.6-clubPhase+clubBend);
           vec3 clubInk=step(vec3(.0),sin(vec3(0.,2.094,4.188)+clubBand*2.4+clubPhase*.3));
           float clubMask=smoothstep(-.25,.25,clubBand);
           float clubRoom=smoothstep(-25.,-23.,clubPosition.z)*(1.-smoothstep(9.7,10.4,clubPosition.x));
@@ -965,7 +999,8 @@
     }
     function renderClub(){
       const intense=playing&&!softMode&&readRoomDistance()<.7;
-      projectionState.clubPhase.value=intense?beatCount*.65:0;
+      projectionState.clubPhase.value=intense?visualMusic.beat*.65:0;
+      projectionState.clubMelody.value=intense?visualMusic.melody:0;
       projectionState.clubStrength.value=intense?.86:0;
       if(!intense){renderer.render(scene,camera);return;}
       const beat=Math.floor(Math.max(0,beatCount));
@@ -987,7 +1022,7 @@
     function drawFrame(time){
       const dt=Math.min(.08,Math.max(0,(time-last)/1000||0));last=time;
       if(!document.hidden){
-        clockTime+=dt;updateWorld(dt);
+        clockTime+=dt;updateWorld(dt);updateVisualMusic(dt);
         guests.forEach(guest=>animateGuest(guest,clockTime));updateSmoke(dt);updateLights();updateScreen();updateWallEffects();updateFloorEffects();updateHeldDrink();updateBeatGuide();
         renderClub();
       }
