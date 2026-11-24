@@ -770,14 +770,35 @@
     const heartLifetime=2.2,heartInterval=.65;
     let heartNext=0;
     function buildHearts(){
-      const shape=new THREE.Shape();shape.moveTo(0,-.5);
-      shape.bezierCurveTo(-.95,.05,-.5,.85,0,.35);
-      shape.bezierCurveTo(.5,.85,.95,.05,0,-.5);
-      const geometry=new THREE.ShapeGeometry(shape);
-      for(let index=0;index<6;index++){
-        const material=new THREE.MeshBasicMaterial({color:0xff398a,transparent:true,
-          opacity:0,depthWrite:false,side:THREE.DoubleSide,toneMapped:false});
-        const mesh=new THREE.Mesh(geometry,material);mesh.visible=false;scene.add(mesh);
+      const colors=['#ff8cbf','#ffd28e','#a1f7ea','#c5a9ff','#b9ed9b','#ffa599'];
+      for(const [index,color] of colors.entries()){
+        const surface=document.createElement('canvas');
+        surface.width=surface.height=128;
+        const brush=surface.getContext('2d');
+        brush.font='110px Arial';
+        brush.textAlign='center';
+        brush.textBaseline='middle';
+        brush.shadowColor=color;
+        brush.shadowBlur=15;
+        brush.fillStyle=color;
+        brush.fillText('♥',64,65);
+        brush.shadowBlur=0;
+        brush.font='102px Arial';
+        brush.fillStyle='#050506';
+        brush.fillText('♥',64,65);
+        brush.strokeStyle=color;
+        brush.lineWidth=3;
+        brush.beginPath();
+        brush.moveTo(43,63);brush.lineTo(53,63);brush.lineTo(59,54-index);
+        brush.lineTo(65,74+index);brush.lineTo(73,57);brush.lineTo(78,63);brush.lineTo(85,63);
+        brush.stroke();
+        brush.font='20px Arial';
+        brush.fillStyle=color;
+        brush.fillText(index%2?'✦':'✧',index%2?100:28,36+index*2);
+        const map=new THREE.CanvasTexture(surface);
+        map.colorSpace=THREE.SRGBColorSpace;
+        const material=new THREE.SpriteMaterial({map,opacity:0,depthWrite:false,toneMapped:false});
+        const mesh=new THREE.Sprite(material);mesh.visible=false;scene.add(mesh);
         danceHearts.push({mesh,born:-Infinity,x:0,z:0});
       }
     }
@@ -790,17 +811,18 @@
       }
       if(danceGuest&&elapsed>=heartNext){
         if(!danceHearts.length)buildHearts();
-        const heart=danceHearts.find(heart=>elapsed-heart.born>=heartLifetime);
+        const heart=danceHearts.reduce((oldest,heart)=>heart.born<oldest.born?heart:oldest);
         if(heart){heart.born=elapsed;heart.x=danceGuest.x;heart.z=danceGuest.z;}
         heartNext=elapsed+heartInterval;
       }
+      const pulse=heartbeatPulse(Math.abs(beatCount-Math.round(beatCount)));
+      const sway=Math.sin(beatCount*Math.PI*2)*.07;
       for(const heart of danceHearts){
         const age=(elapsed-heart.born)/heartLifetime;
         heart.mesh.visible=age>=0&&age<1;
         if(!heart.mesh.visible)continue;
-        heart.mesh.position.set(heart.x+Math.sin(age*4)*.15,2.35+age*.9,heart.z);
-        heart.mesh.quaternion.copy(camera.quaternion);
-        heart.mesh.scale.setScalar(.3+Math.sin(age*Math.PI)*.16);
+        heart.mesh.position.set(heart.x+Math.sin(age*4)*.15+sway,2.35+age*.9+pulse*.09,heart.z);
+        heart.mesh.scale.setScalar((.45+Math.sin(age*Math.PI)*.2)*(1+pulse*.28));
         heart.mesh.material.opacity=Math.sin(age*Math.PI)*.85;
       }
     }
