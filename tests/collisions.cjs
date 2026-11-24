@@ -35,8 +35,21 @@ function clearOfWalls(){
 }
 let passed=0;
 function check(name,run){run();passed++;console.log('PASS '+name);}
-check('the entrance leads from the vestibule through the passage onto the floor',()=>{
-  assert.ok(game.player.z>5);
+check('the entrance hides the dance floor until the route doubles back',()=>{
+  scene.updateMatrixWorld(true);
+  for(const x of [-1,0,2,3.6,4.45,5])for(const z of [8.7,10,12.35,13.8]){
+    const eye=new THREE.Vector3(x,1.64,z);
+    for(const floorX of [-9,-4,0,4,9]){
+      const target=new THREE.Vector3(floorX,1.64,-5);
+      const direction=target.clone().sub(eye);
+      const ray=new THREE.Raycaster(eye,direction.clone().normalize(),0,direction.length());
+      assert.ok(ray.intersectObjects(scene.children,false).length,'the outer corridor blocks sight into the club');
+    }
+  }
+  assert.ok(game.player.z>12);
+  game.movePlayer(0,-8);near(game.player.z,8.89);clearOfWalls();
+  game.movePlayer(4.45-game.player.x,0);game.movePlayer(0,6.3-game.player.z);
+  near(game.player.z,6.3);clearOfWalls();
   game.movePlayer(-game.player.x,0);game.movePlayer(0,-9);
   assert.ok(game.player.z<0);clearOfWalls();
   game.movePlayer(0,15);near(game.player.z,8.11);clearOfWalls();
